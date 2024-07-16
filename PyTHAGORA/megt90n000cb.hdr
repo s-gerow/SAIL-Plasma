@@ -1,0 +1,19 @@
+ENVI
+description = {
+  PDS File Imported into ENVI [Tue Aug 22 10:42:35 2017]"Each}
+samples = 1440
+lines   = 720
+bands   = 1
+header offset = 0
+file type = PDS Image
+data type = 2
+interleave = bsq
+sensor type = Unknown
+byte order = 1
+map info = {Mars Equirectangular 3396km C180, 721.0000, 361.0000, 0.0000, 0.0000, 1.4817845349e+004, 1.4817845349e+004, MARS Sphere3396kmD, units=Meters}
+projection info = {17, 3396000.0, 0.000000, 180.000000, 0.0, 0.0, MARS Sphere3396kmD, Mars Equirectangular 3396km C180, units=Meters}
+coordinate system string = {PROJCS["Mars Equirectangular 3396km C180",GEOGCS["GCS_Unknown",DATUM["D_Unknown",SPHEROID["S_Unknown",3396000.0,0.0]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Equidistant_Cylindrical"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",180.0],PARAMETER["Standard_Parallel_1",0.0],UNIT["Meter",1.0]]}
+acquisition time = 1997-09-15T19:10:00.000Z
+sun azimuth = 0.00000000
+wavelength units = Unknown
+data ignore value = 0

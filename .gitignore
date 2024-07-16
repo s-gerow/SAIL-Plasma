@@ -1,0 +1,5 @@
+#JupyterLab
+.ipynb_checkpoints
+
+#Virtual Enviornment
+.venv
