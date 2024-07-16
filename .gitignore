@@ -3,3 +3,11 @@
 
 #Virtual Enviornment
 .venv
+
+#Python
+__pycache__/
+
+#Binary Files
+.hdr
+.img
+.lbl

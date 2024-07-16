@@ -18,7 +18,6 @@ def sph2cart(azimuth,elevation,r):
     return x, y, z
 
 filename = 'megt90n000cb.hdr'
-#path = 'megt90n000cb.hdr'
 R_Mars = 3390e3; 
 A  = 10; #scaling factor
 
