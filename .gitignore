@@ -11,3 +11,6 @@ __pycache__/
 .hdr
 .img
 .lbl
+
+#MACOS
+.DS_Store
