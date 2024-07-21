@@ -5,6 +5,9 @@ import pyvisa
 import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+from pylablib.devices import NI
+import time
+from threading import Thread
 
 #Matplotlib Config
 matplotlib.use('TkAgg')
@@ -12,8 +15,29 @@ matplotlib.use('TkAgg')
 #Initialize Visa Resource Manager
 rm = pyvisa.ResourceManager()
 
+#Connect to DAQ
+daq = NI.NIDAQ("NI_DAQ")
+daq.add_voltage_input('pin', 'ai0')
+
 #Create GUI Window
 root = tk.Tk()
+
+#Functions
+def read_pressure():
+    daq.start()
+    nsamples = 0
+    while nsamples<100:
+        pressure_var.set(daq.read()[0][0])
+        print(pressure_var.get())
+        nsamples+=0
+
+def start():
+    live_pressure = Thread(target = read_pressure)
+    live_pressure.start()
+
+def stop_all():
+    daq.stop()
+    daq.close()
 
 #Configure Window
 root.title("Plasma Chamber 1.0")
@@ -43,6 +67,9 @@ Config4_Frame = tk.Frame(Config_Frame, relief = 'sunken', borderwidth=10)
 Config4_Frame.place(relx=0.6,rely=.07,relwidth=0.2,relheight=0.93)
 Config5_Frame = tk.Frame(Config_Frame, borderwidth=10)
 Config5_Frame.place(relx=0.8,rely=.07,relwidth=0.2,relheight=0.93)
+
+serial_config_frame = tk.Frame(Config2_Frame, relief = 'sunken', borderwidth=10, bg='dark grey')
+serial_config_frame.place(x=75,y=75,width=200,height=275)
 
 #Labels
 title_font = ("Times New Roman", 18, 'bold')
@@ -175,8 +202,8 @@ pressure_spinbox = tk.Spinbox(IO_Frame,
                               textvariable=init_pressure
                               ).place(x=552, y=425, width=125)
     #Start/Stop Buttons
-start_button = ttk.Button(Disp_Frame, text = 'START').place(x=25, y=390, width=200, height=100)
-stop_button = ttk.Button(Disp_Frame, text = 'STOP').place(x=250, y=390, width=200, height=100)
+start_button = ttk.Button(Disp_Frame, text = 'START', command=start).place(x=25, y=390, width=200, height=100)
+stop_button = ttk.Button(Disp_Frame, text = 'STOP',command=stop_all).place(x=250, y=390, width=200, height=100)
     
     #Event Triggerd Button
 def triggerdebug():
@@ -208,29 +235,217 @@ axes.set_xlabel('Time')
 figure_canvas.get_tk_widget().place(x=0,y=0, relheight=1, relwidth=1)
 
     #Output Spinboxes
-pwr_supply_voltage = tk.StringVar()
-pwr_supply_current = tk.StringVar()
-voltage_output = tk.StringVar()
-pressure_output = tk.StringVar()
 pwr_output_label = tk.Label(Disp_Frame,
                             text = "Power Supply Voltage",
                             font = label_font
-                            ).place(x=250,y=215)
+                            ).place(x=250,y=175)
 pwr_current_label = tk.Label(Disp_Frame,
                              text = "Power Supply Current",
                              font = label_font
-                            ).place(x=250,y=240)
+                            ).place(x=250,y=225)
 voltage_out_label = tk.Label(Disp_Frame,
                              text = "Voltage Output",
                              font = label_font,
-                             ).place(x=250,y=265)
+                             ).place(x=250,y=275)
 pressure_out_label = tk.Label(Disp_Frame,
                               text = "Pressure (Torr)",
                               font = label_font,
-                              ).place(x=250,y=340)
+                              ).place(x=250,y=325)
+PS_voltage_var = tk.IntVar()
+pwr_output_spnbx = tk.Spinbox(Disp_Frame,
+                              from_=0,
+                              to = 800,
+                              textvariable=PS_voltage_var
+                              ).place(x=250, y=200, width=125)
+PS_current_var = tk.IntVar()
+pwr_current_spnbx = tk.Spinbox(Disp_Frame,
+                              from_=0,
+                              to = 800,
+                              textvariable=PS_current_var
+                              ).place(x=250, y=250, width=125)
+voltage_out_var = tk.IntVar()
+voltage_out_spnbx = tk.Spinbox(Disp_Frame,
+                              from_=0,
+                              to = 800,
+                              textvariable=voltage_out_var
+                              ).place(x=250, y=300, width=125)
+pressure_var = tk.IntVar()
+pressure_output_spnbx = tk.Spinbox(Disp_Frame,
+                              from_=0,
+                              to = 800,
+                              textvariable=pressure_var
+                              ).place(x=250, y=350, width=125)
+
+#O-Scope Config Options
+reset_opt = tk.IntVar()
+reset_label = tk.Label(Config1_Frame,
+                       text = 'Reset (False)',
+                       font = label_font,
+                       ).place(x=50,y=25)
+#channel_var
+channel_label = tk.Label(Config1_Frame,
+                         text = "Channel (1)",
+                         font = label_font
+                         ).place(x=200, y=25)
+#timebase_var
+timebase_label = tk.Label(Config1_Frame,
+                          text = "Timebase (0.0005 s)",
+                          font = label_font
+                          ).place(x=50, y=75)
+#trigger_lvl_var
+trigger_lvl_label = tk.Label(Config1_Frame,
+                             text = "Trigger Level (-0.08 V)",
+                             font = label_font
+                             ).place(x=50, y=125)
+#trigger_slope_var
+trigger_slope_label = tk.Label(Config1_Frame,
+                               text = "Trigger Slope (1: Negative)",
+                               font = label_font
+                               ).place(x=50, y=175)
+#timeout_var
+timeout_label = tk.Label(Config1_Frame,
+                         text = "Timeout (600,000 ms)",
+                         font = label_font
+                         ).place(x=50, y=225)
+#vert_off_var
+vert_off_label = tk.Label(Config1_Frame,
+                          text = "Veritcal Offset (0 mV)",
+                          font = label_font
+                          ).place(x=50, y=275)
+#vert_range_var
+vert_range_label = tk.Label(Config1_Frame,
+                            text = "Vertical Range (0.15 V)",
+                            font = label_font
+                            ).place(x=50,y=325)
+#holdoff_var
+holdoff_label = tk.Label(Config1_Frame,
+                         text = "Holdoff Value (2E-8 s)",
+                         font = label_font
+                         ).place(x=50, y=375)
+
+#Power Config 
+config_frame_label = tk.Label(Config2_Frame,
+                              text = "Serial Configuration Power",
+                              font = label_font
+                              ).place(x=75,y=50)
+    #Baud Rate
+baud_rate_label = tk.Label(serial_config_frame,
+                           text = "Baud Rate",
+                           bg = 'dark grey'
+                           ).place(x=0,y=0)
+    #Flow Control
+flow_control_label = tk.Label(serial_config_frame,
+                              text = "Flow Control",
+                              bg = 'dark grey'
+                              ).place(x=0, y=50)
+    #Parity
+parity_label = tk.Label(serial_config_frame,
+                        text = "Parity",
+                        bg = 'dark grey'
+                        ).place(x=0, y=100)
+    #Data Bits
+data_bits_label = tk.Label(serial_config_frame,
+                           text = "Data Bits",
+                           bg = 'dark grey'
+                           ).place(x=0, y=150)
+    #Stop Bits
+stop_bits_label = tk.Label(serial_config_frame,
+                           text = "Stop Bits",
+                           bg = 'dark grey'
+                           ).place(x=0, y=200)
+    #Voltage Step Size
+voltage_set_label = tk.Label(Config2_Frame,
+                             text = "Voltage Step Size (0.5 V)",
+                             font = label_font
+                             ).place(x=75, y=350)
+
+#Dmm Config
+    #Function
+function_label = tk.Label(Config3_Frame,
+                          text = "Function (0: Voltage DC)",
+                          font = label_font,
+                          ).place(x=75,y=25)
+    #Reading Buffer
+reading_buffer_label = tk.Label(Config3_Frame,
+                                text = "Reading Buffer (debugger1)",
+                                font = label_font
+                                ).place(x=75,y=75)
+    #Buffer Size
+buffer_size_label = tk.Label(Config3_Frame,
+                             text = "Buffer Size (10)",
+                             font = label_font
+                             ).place(x=75, y=125)
+    #Manual Range
+manual_range_label = tk.Label(Config3_Frame,
+                              text = "Manual Range (0)",
+                              font = label_font
+                              ).place(x=75, y=175)
+    #Auto Zero
+auto_zero_label = tk.Label(Config3_Frame,
+                           text = "Auto Zero (0:Enable)",
+                           font = label_font
+                           ).place(x=75, y=225)
+    #Limit Number
+limit_num_label = tk.Label(Config3_Frame,
+                            text = "Limit Number (1: Limit 1)",
+                            font = label_font
+                            ).place(x=75, y=275)
+    #Enable Limit
+
+    #Lower Limit
+lower_lim_label = tk.Label(Config3_Frame,
+                           text = "Lower Limit (0)",
+                           font = label_font
+                           ).place(x=75,y=375)
+    #Upper Limit
+upper_lim_label = tk.Label(Config3_Frame,
+                           text = "Upper Limit (0)",
+                           font = label_font
+                           ).place(x=200, y=375)
 
 
-#Functions
+#Pressure Config
+    #PS initial Voltage
+PS_init_v_label = tk.Label(Config4_Frame,
+                           text = 'Initial Pressure Voltage',
+                           font = label_font,
+                           ).place(x=75, y=50)
+    #PS Initial Torr
+PS_init_torr_label = tk.Label(Config4_Frame,
+                              text = "Initial Pressure Torr",
+                              font = label_font,
+                              ).place(x=75, y=100)
+    #median PS voltage
+PS_median_v = tk.Label(Config4_Frame, 
+                       text = "Median Pressure Voltage",
+                       font = label_font
+                       ).place(x=75, y=150)
+    #filter type
+filter_type_label = tk.Label(Config4_Frame,
+                             text = "Filter Type (LP)",
+                             font = label_font
+                             ).place(x=75, y=200)
+    #sampling freq
+sampling_freq = tk.Label(Config4_Frame,
+                         text = "Sampling Freq (100.00)",
+                         font = label_font
+                         ).place(x=75, y=250)
+    #HFC
+HFC_label = tk.Label(Config4_Frame,
+                     text = "HFC (25.00)",
+                     font = label_font
+                     ).place(x=75, y=300)
+    #LFC
+LFC_label = tk.Label(Config4_Frame,
+                     text = "LFC (10.00)",
+                     font = label_font
+                     ).place(x=200,y=300)
+    #number of samples
+sample_number_label = tk.Label(Config4_Frame,
+                               text = "Number of Samples (100)",
+                               font = label_font
+                               ).place(x=75, y=350)
+
 
 
 
