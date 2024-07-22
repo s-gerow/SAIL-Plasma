@@ -1,22 +1,24 @@
 #JupyterLab
-.ipynb_checkpoints
+*.ipynb_checkpoints
 
 #Virtual Enviornment
 .venv
+*.venv
 
 #Python
 __pycache__/
 
 #Binary Files
-.hdr
-.img
-.lbl
-.LBL
-.TAB
+*.lbl
+*.img
+*.hdr
+*.stl
+*.TAB
 
 #MACOS
-.DS_Store
+*.DS_Store
 
 #MATLAB
-.mlx
+*.mlx
+
 
