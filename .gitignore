@@ -11,6 +11,12 @@ __pycache__/
 .hdr
 .img
 .lbl
+.LBL
+.TAB
 
 #MACOS
 .DS_Store
+
+#MATLAB
+.mlx
+
