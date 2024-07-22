@@ -2,7 +2,6 @@
 *.ipynb_checkpoints
 
 #Virtual Enviornment
-.venv
 *.venv
 
 #Python
