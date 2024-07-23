@@ -3,10 +3,10 @@ Repository for Python Code Relating to the Project PyTHAGORA or Project BeAMED a
 
 ## Project PyTHAGORA
 ***Py**thon **T**raining for **H**eliophysics, **A**stronomy, and **G**eosciences: an **O**pencourse for **R**esearchers with **A**pplications*  
-Project PyTHAGORA is a self-guided, open source, cross-platform training course for the purpose of teaching Python to an absolute beginner with relevent examples to current applications across a variety of industries. 
+Project PyTHAGORA is a self-guided, open source, cross-platform training course for the purpose of teaching Python to an absolute beginner with relevant examples to current applications across a variety of industries. 
 ### Course Overview
 #### **Py1. Base Track**  
->*Software Requirements: Google Colab, JupyterLab, or equivilent IDE capable of reading and editing .pynb files*  
+>*Software Requirements: Google Colab, JupyterLab, or equivalent IDE capable of reading and editing .pynb files*  
 *Hardware Requirements: A computer with the most recent installation of Python*
 
 This track will teach you the basics of Python programming and prepare you for the 4 more advanced tracks.
@@ -44,7 +44,7 @@ An additional mini-track which will teach you about how modules and packages wor
 
 #### **Py2. Robotics Track**  
 >*Prerequisites: Py1*  
-*Software Requirements: Google Colab, JupyterLab, or equivilent IDE*  
+*Software Requirements: Google Colab, JupyterLab, or equivalent IDE*  
 *Hardware Requirements: A computer with the most recent installation of Python; LEGO Spike smart hub with most recent installation of Pybricks micro-python*
 
 This track aims to teach general robotics and system control by utilizing a LEGO Spike Prime smart brick and Pybricks micro-Python software.
@@ -66,7 +66,7 @@ This section will teach you the basic concepts of system control and how they ar
 
 #### **Py3. Data Acquisition, Visualization, and Analysis**  
 >*Prerequisites: Py1*  
-*Software Requirements: Google Colab, JupyterLab, or equivilent IDE*  
+*Software Requirements: Google Colab, JupyterLab, or equivalent IDE*  
 *Hardware Requirements: A computer with the most recent installation of Python*  
 
 This track will teach you how to interface with devices in an experiment to retrieve relevant data, visualize it with Matplotlib, and analyze it.
@@ -79,7 +79,7 @@ Data Acquisition
 
 #### **Py4. Plasma Physics**  
 >*Prerequisites: Py1, Py3*  
-*Software Requirements: Google Colab, JupyterLab, or equivilent IDE*  
+*Software Requirements: Google Colab, JupyterLab, or equivalent IDE*  
 *Hardware Requirements: A computer with the most recent installation of Python*  
 
 This section will teach you the basic principles of plasma physics as well as several uses for Python within the field.
@@ -94,7 +94,7 @@ This section will teach you the basic principles of plasma physics as well as se
 
 #### **Py5. Astronomy**
 >*Prerequisites: Py1, Py3*  
-*Software Requirements: Google Colab, JupyterLab, or equivilent IDE*  
+*Software Requirements: Google Colab, JupyterLab, or equivalent IDE*  
 *Hardware Requirements: A computer with the most recent installation of Python*
 
 This section will teach you various applications of Python in Astrophysics. This section has extensive use of Numpy and Astropy.
