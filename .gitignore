@@ -20,4 +20,6 @@ __pycache__/
 #MATLAB
 *.mlx
 
-
+#Testing on MacBook
+PyTHAGORA/Module4_PlasmaPhysics/rbf_interpolate.py
+PyTHAGORA/CourseFlowchart.py
