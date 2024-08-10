@@ -7,7 +7,11 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from pylablib.devices import NI
 import time
-from threading import Thread
+from threading import Thread, Event
+import numpy as np
+from scipy import signal
+import nidaqmx
+from nidaqmx.constants import TerminalConfiguration, AcquisitionType
 
 #Matplotlib Config
 matplotlib.use('TkAgg')
@@ -15,29 +19,52 @@ matplotlib.use('TkAgg')
 #Initialize Visa Resource Manager
 rm = pyvisa.ResourceManager()
 
-#Connect to DAQ
-daq = NI.NIDAQ("NI_DAQ")
-daq.add_voltage_input('pin', 'ai0')
 
 #Create GUI Window
 root = tk.Tk()
 
+def clean_exit():
+    print("cleaning up...")
+    stop_all_event.set()
+    print("threads stopped")
+    root.destroy()
+
+root.protocol('WM_DELETE_WINDOW', clean_exit)  # root is your root window
+
+
 #Functions
-def read_pressure():
-    daq.start()
-    nsamples = 0
-    while nsamples<100:
-        pressure_var.set(daq.read()[0][0])
-        print(pressure_var.get())
-        nsamples+=0
+stop_all_event = Event()
+def read_pressure(event: stop_all_event):
+    while True:
+        with nidaqmx.Task() as task:
+            ai_channel = task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val = 1, max_val = 8, terminal_config=TerminalConfiguration.RSE)
+            task.timing.cfg_samp_clk_timing(rate = 1000, sample_mode=AcquisitionType.FINITE,samps_per_chan=100)
+            pressure_sensor_voltage=np.array(task.read(100))
+            #sos = signal.butter(2, 1, btype = "lowpass", analog = True, output='sos')
+            #filtered = signal.sosfilt(sos, pressure_sensor_voltage)
+            #filtered_avg = np.median(filtered)
+            unfiltered_avg = np.median(pressure_sensor_voltage)
+            true_pressure = 10**(unfiltered_avg-5)
+            pressure_var.set(true_pressure)
+        if event.is_set():
+            print("stopping...")
+            print("Stopped Reading Pressure. Last Reading:",true_pressure)
+            break
+    #print("100 samples taken. Report:", pressure_sensor_voltage, unfiltered)
+
+    
 
 def start():
-    live_pressure = Thread(target = read_pressure)
+    stop_all_event.clear()
+    live_pressure = Thread(target = read_pressure, args = (stop_all_event,))
+    print('starting')
     live_pressure.start()
+    print("thread started")
 
 def stop_all():
-    daq.stop()
-    daq.close()
+    print("stopping")
+    stop_all_event.set()
+    print("thread stopped")
 
 #Configure Window
 root.title("Plasma Chamber 1.0")
