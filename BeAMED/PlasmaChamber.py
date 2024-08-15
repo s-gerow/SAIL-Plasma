@@ -16,21 +16,29 @@ from nidaqmx.constants import TerminalConfiguration, AcquisitionType
 #Matplotlib Config
 matplotlib.use('TkAgg')
 
-#Initialize Visa Resource Manager
+#Initialize Visa Resource Manager to Communicate with Oscilliscope
+#We are using SIGLENT SDS1204X-E, commands can be found in the SDS1202X-E Programming Manual
 rm = pyvisa.ResourceManager()
 
 
 #Create GUI Window
 root = tk.Tk()
 
+#This intercepts the X button to guarentee when we close the app it properly ends threads and closes communication with devices to avoid causing IO and memory issues in the future.
 def clean_exit():
     print("cleaning up...")
     stop_all_event.set()
     print("threads stopped")
     root.destroy()
+root.protocol('WM_DELETE_WINDOW', clean_exit) 
 
-root.protocol('WM_DELETE_WINDOW', clean_exit)  # root is your root window
 
+#Configure Window
+root.title("Plasma Chamber 1.0")
+scrnwidth = root.winfo_screenwidth()
+scrnheight = root.winfo_screenheight()
+root.geometry("%dx%d" % (scrnwidth,scrnheight))
+root.pack_propagate(0)
 
 #Functions
 stop_all_event = Event()
@@ -52,26 +60,29 @@ def read_pressure(event: stop_all_event):
             break
     #print("100 samples taken. Report:", pressure_sensor_voltage, unfiltered)
 
-    
+def configure_oscilloscope(event: stop_all_event):
+    print("getting osc selection")
+    osc = rm.open_resource(osc_cbox.get())
+    print(osc.query('*IDN?'))
 
+    
 def start():
+    '''This function defines the START Button which sets the configuartions for each device then begins the experiment.'''
     stop_all_event.clear()
-    live_pressure = Thread(target = read_pressure, args = (stop_all_event,))
-    print('starting')
-    live_pressure.start()
-    print("thread started")
+    with open('debug.txt', 'w') as f:
+        f.write("Debug File for test ran on "+ time.strftime("%c", time.localtime())+"\n")
+        live_pressure = Thread(target = read_pressure, args = (stop_all_event,))
+        configure = Thread(target=configure_oscilloscope, args = (stop_all_event,))
+        print("configuring oscilloscope")
+        configure.start()
+        print("thread started")
 
 def stop_all():
+    '''This function is attached to the STOP button and kills all threads and processes.'''
     print("stopping")
     stop_all_event.set()
     print("thread stopped")
 
-#Configure Window
-root.title("Plasma Chamber 1.0")
-scrnwidth = root.winfo_screenwidth()
-scrnheight = root.winfo_screenheight()
-root.geometry("%dx%d" % (scrnwidth,scrnheight))
-root.pack_propagate(0)
 
 #Build Framwork
 IO_Frame = tk.Frame(root, relief = "sunken", borderwidth=10)
@@ -126,17 +137,21 @@ trig_false_image.put(("green"), to=(0,0,49,49))
     #I/O selection for Oscilloscope, Power, and Digital Multimeter
 IO_opts = rm.list_resources()
 pwr_io_label = tk.Label(IO_Frame, text = 'VISA Power', font = label_font).place(x=25, y=50)
-pwr_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = IO_opts).place(x=25, y=75)
+pwr_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = IO_opts)
+pwr_cbox.place(x=25, y=75)
 v_out_label = tk.Label(IO_Frame, text = 'Enable V-Output Power', font = label_font).place(x=200, y=50)
 v_out = ttk.Checkbutton(IO_Frame, text = 'T:Enable').place(x=200, y=75)
 
 osc_io_label = tk.Label(IO_Frame, text = 'VISA O-Scope', font = label_font).place(x=25, y=100)
-osc_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = IO_opts).place(x=25, y=125)
+osc_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = IO_opts)
+osc_cbox.place(x=25, y=125)
 cont_daq_label = tk.Label(IO_Frame, text='Enable Continuous Acquisition O-Scope', font = label_font).place(x=200, y=100)
-cont_daq = ttk.Checkbutton(IO_Frame, text = 'T: Enable').place(x=200, y=125)
+cont_daq = ttk.Checkbutton(IO_Frame, text = 'T: Enable')
+cont_daq.place(x=200, y=125)
 
 dmm_io_label = tk.Label(IO_Frame, text = 'VISA DMM', font = label_font).place(x=25, y=150)
-dmm_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = IO_opts).place(x=25, y=175)
+dmm_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = IO_opts)
+dmm_cbox.place(x=25, y=175)
 auto_range_label = tk.Label(IO_Frame, text = 'Auto Range DMM', font = label_font).place(x=200, y=150)
 auto_range = ttk.Checkbutton(IO_Frame, text = 'T: Enable').place(x=200, y=175)
 
@@ -228,10 +243,12 @@ pressure_spinbox = tk.Spinbox(IO_Frame,
                               to = 800,
                               textvariable=init_pressure
                               ).place(x=552, y=425, width=125)
+
+
     #Start/Stop Buttons
 start_button = ttk.Button(Disp_Frame, text = 'START', command=start).place(x=25, y=390, width=200, height=100)
 stop_button = ttk.Button(Disp_Frame, text = 'STOP',command=stop_all).place(x=250, y=390, width=200, height=100)
-    
+
     #Event Triggerd Button
 def triggerdebug():
     print(triggered_var.get())
@@ -304,51 +321,64 @@ pressure_output_spnbx = tk.Spinbox(Disp_Frame,
                               ).place(x=250, y=350, width=125)
 
 #O-Scope Config Options
-reset_opt = tk.IntVar()
 reset_label = tk.Label(Config1_Frame,
                        text = 'Reset (False)',
                        font = label_font,
-                       ).place(x=50,y=25)
+                       ).place(x=50,y=30)
+reset_opt = ttk.Checkbutton(Config1_Frame, text="T: Enable")
+reset_opt.place(x=50,y=60)
 #channel_var
 channel_label = tk.Label(Config1_Frame,
                          text = "Channel (1)",
                          font = label_font
-                         ).place(x=200, y=25)
+                         ).place(x=200, y=30)
+channel_spnbox = tk.Spinbox(Config1_Frame, 
+                            values=['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'],
+                            state='readonly'
+                            )
+channel_spnbox.place(x=200, y=60)
 #timebase_var
 timebase_label = tk.Label(Config1_Frame,
                           text = "Timebase (0.0005 s)",
                           font = label_font
-                          ).place(x=50, y=75)
+                          ).place(x=50, y=80)
+timebase_spnbox = tk.Spinbox(Config1_Frame,
+                             from_=00,
+                             )
+timebase_spnbox.place(x=50,y=105)
 #trigger_lvl_var
 trigger_lvl_label = tk.Label(Config1_Frame,
                              text = "Trigger Level (-0.08 V)",
                              font = label_font
-                             ).place(x=50, y=125)
+                             ).place(x=50, y=130)
+trigger_lvl_spnbox = tk.Spinbox(Config1_Frame,
+                                )
+trigger_lvl_spnbox.place(x=50,y=155)
 #trigger_slope_var
 trigger_slope_label = tk.Label(Config1_Frame,
                                text = "Trigger Slope (1: Negative)",
                                font = label_font
-                               ).place(x=50, y=175)
+                               ).place(x=50, y=180)
 #timeout_var
 timeout_label = tk.Label(Config1_Frame,
                          text = "Timeout (600,000 ms)",
                          font = label_font
-                         ).place(x=50, y=225)
+                         ).place(x=50, y=230)
 #vert_off_var
 vert_off_label = tk.Label(Config1_Frame,
                           text = "Veritcal Offset (0 mV)",
                           font = label_font
-                          ).place(x=50, y=275)
+                          ).place(x=50, y=280)
 #vert_range_var
 vert_range_label = tk.Label(Config1_Frame,
                             text = "Vertical Range (0.15 V)",
                             font = label_font
-                            ).place(x=50,y=325)
+                            ).place(x=50,y=330)
 #holdoff_var
 holdoff_label = tk.Label(Config1_Frame,
                          text = "Holdoff Value (2E-8 s)",
                          font = label_font
-                         ).place(x=50, y=375)
+                         ).place(x=50, y=380)
 
 #Power Config 
 config_frame_label = tk.Label(Config2_Frame,
@@ -472,8 +502,6 @@ sample_number_label = tk.Label(Config4_Frame,
                                text = "Number of Samples (100)",
                                font = label_font
                                ).place(x=75, y=350)
-
-
 
 
 root.mainloop()
