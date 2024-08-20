@@ -22,8 +22,6 @@ matplotlib.use('TkAgg')
 #We are using SIGLENT SDS1204X-E, commands can be found in the SDS1202X-E Programming Manual
 rm = pyvisa.ResourceManager()
 
-
-
 #Create GUI Window
 root = tk.Tk()
 
@@ -61,11 +59,36 @@ root.pack_propagate(0)
 
 #Threading Events
 '''These events are for the start function to know when the threads have finished and it can move on to the next step.'''
-stop_all_event = Event()
-osc_configured = Event()
+stop_all_event = Event() #event for the stopping of functions manually. called by clicking the stop button
+discharge_event = Event() #even to determine if the experiment has completed and the discharge trigger has been activated.
+osc_configured = Event() #event to confirm oscilloscope has been configured
 pwr_configured = Event()
 pressure_configured =Event()
 DMM_configured = Event()
+visa_error = Event() #event to identify problems with pyvisa and related hardware
+config_error = Event() #event to identify errors with the configuration of a device, primarily to locate incorrectly defined config settings
+
+
+def check_events():
+    '''Daemon thread to check for events in the backgournd to handle'''
+    while not stop_all_event.is_set() or not discharge_event.is_set():
+        thread = "EVENT"
+        if visa_error.is_set():
+            level = "WARN"
+            #The following code will only work if the scolloscope is plugged into the USB0 spot on the computer. A more advanced loop would be needed to make this viable in all cases.
+            log_message(thread, level, "VisaIOError excepted, searching for oscilloscope")
+            osc_name = 'USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR'
+            for resource in rm.list_resources():
+                if resource == osc_name:
+                    visa_error.clear()
+                    root.after(0, osc_cbox.set(resource))
+                else:
+                    continue
+            if visa_error.is_set():
+                level = "ERROR"
+                log_message(thread, level, "unable to find oscilloscope, stopping process.")
+                stop_all_event.set()
+
 
 #Functions
 def read_pressure(event: stop_all_event):
@@ -85,38 +108,56 @@ def read_pressure(event: stop_all_event):
                 level = "WARN"
                 log_message(thread, level, "stop all event triggered")
                 log_message(thread, level, f"Stopped Reading Pressure. Last Reading: {true_pressure}")
+            if discharge_event.is_set():
+                level = "INFO"
+                log_message(thread, level, "discharge event triggered")
+                log_message(thread, level, f"Stopped Reading Pressure. Last Reading: {true_pressure}")
+                break
 
-def configure_power(ID, event: stop_all_event):
+def configure_power():
     '''Thread to read through '''
     thread = "PWR CFG"
     level = "INFO"
-def configure_oscilloscope(event: stop_all_event):
-    '''Thread to configure oscilloscope this is a non-daemonic, non-looping thread so it does can not be interrupted by the stop all function. '''
+
+def configure_oscilloscope():
+    '''Thread to configure oscilloscope. this is a non-daemonic, non-looping thread so it does can not be interrupted by the stop all function. '''
     thread = "OSC CFG"
     level = "INFO"
-    try: 
-        osc = rm.open_resource(osc_cbox.get())
-    except pyvisa.errors.VisaIOError:
-        level = "ERROR"
-        log_message(thread, level, "VisaIOError excepted: stopping process")
-        stop_all_event.set()
-        return
+    for i in range(2):
+        try: 
+            osc = rm.open_resource(osc_cbox.get())
+        except pyvisa.errors.VisaIOError:
+            level = "ERROR"
+            log_message(thread, level, "VisaIOError excepted: cannot continue until oscilloscope connected")
+            visa_error.set()
+            while visa_error.is_set():
+                time.sleep(1)
+            try:
+                osc = rm.open_resource(osc_cbox.get())
+            except:
+                level = "ERROR"
+                log_message(thread, level, "connecting to oscilloscope failed after second attempt. ending process")
+                stop_all_event.set()
+                return
+            else:
+                level = "INFO"
+                log_message(thread, level, "connection to oscilloscope succeeded after second attempt")
     osc = rm.open_resource(osc_cbox.get())
     print(osc.query('*IDN?'))
     return
 
 def start():
     '''This function defines the START Button which sets the configuartions for each device then begins the experiment.'''
+    thread = "MAIN"
+    level = "INFO"
+    log_message(thread, level, "start input received. starting chamber process")
     stop_all_event.clear()
-    start_log()
+    Thread(target=check_events, daemon=True).start()
     global live_pressure
     live_pressure = Thread(target = read_pressure, args = (stop_all_event,))
-    configure = Thread(target=configure_oscilloscope, args = (stop_all_event,))
+    configure = Thread(target=configure_oscilloscope)
     configure.start()
     live_pressure.start()
-    
-    #if reset_opt.getvar != "Disable":
-    #   raise ValueError("oscilloscope reset is enabled")
 
 
 def stop_all():
@@ -307,8 +348,12 @@ start_button = ttk.Button(Disp_Frame, text = 'START', command=start).place(x=25,
 stop_button = ttk.Button(Disp_Frame, text = 'STOP',command=stop_all).place(x=250, y=390, width=200, height=100)
 
     #Event Triggerd Button
-def triggerdebug():
-    print(triggered_var.get())
+def discharge_triggered():  
+    thread = "MAIN"
+    level = "INFO"
+    log_message(thread, level, "Discahrge Event Triggered. stopping process")
+    discharge_event.set()  
+
 triggered_var = tk.IntVar()
 triggered_button = tk.Checkbutton(Disp_Frame, 
                                   text = "Event Triggered?", 
@@ -318,7 +363,7 @@ triggered_button = tk.Checkbutton(Disp_Frame,
                                   onvalue = 1, 
                                   offvalue = 0, 
                                   variable = triggered_var, 
-                                  command = triggerdebug
+                                  command = discharge_triggered
                                   ).place(x=40, y=315)
 trigger_label = tk.Label(Disp_Frame,
                          text = "Triggered\nEvent",
@@ -563,6 +608,5 @@ sample_number_label = tk.Label(Config4_Frame,
                                font = label_font
                                ).place(x=75, y=350)
 
-
-
+start_log()
 root.mainloop()
