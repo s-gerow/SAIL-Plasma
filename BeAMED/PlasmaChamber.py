@@ -59,8 +59,19 @@ root.pack_propagate(0)
 
 #Threading Events
 '''These events are for the start function to know when the threads have finished and it can move on to the next step.'''
+class ExperimentEvent(Event, ):
+    def __init__(self, pressure="", ps_voltage="", ps_current="", voltage_out=""):
+        super().__init__()
+        self.pressure = pressure
+        self.ps_voltage = ps_voltage
+        self.ps_current = ps_current
+        self.voltage_out = voltage_out
+    def experiment_output(self):
+        output = [self.pressure, self.ps_voltage, self.ps_current, self.voltage_out]
+        return output
+
+discharge_event = ExperimentEvent()
 stop_all_event = Event() #event for the stopping of functions manually. called by clicking the stop button
-discharge_event = Event() #even to determine if the experiment has completed and the discharge trigger has been activated.
 osc_configured = Event() #event to confirm oscilloscope has been configured
 pwr_configured = Event()
 pressure_configured =Event()
@@ -88,6 +99,7 @@ def check_events():
                 level = "ERROR"
                 log_message(thread, level, "unable to find oscilloscope, stopping process.")
                 stop_all_event.set()
+                visa_error.clear()
 
 
 #Functions
@@ -112,6 +124,7 @@ def read_pressure(event: stop_all_event):
                 level = "INFO"
                 log_message(thread, level, "discharge event triggered")
                 log_message(thread, level, f"Stopped Reading Pressure. Last Reading: {true_pressure}")
+                discharge_event.pressure = true_pressure
                 break
 
 def configure_power():
@@ -168,6 +181,12 @@ def stop_all():
     stop_all_event.set()
     log_message(thread, level, "stop event set, waiting for threads to finish")
 
+
+def toggle_check_btn(btn, var):
+    if var.get() == "Enable":
+        btn.configure(text='T: Enable')
+    elif var.get() == "Disable":
+        btn.configure(text='F: Disable')
 
 #Build Framwork
 IO_Frame = tk.Frame(root, relief = "sunken", borderwidth=10)
@@ -233,25 +252,47 @@ def update_combo_box():
         dmm_cbox['values'] = IO_opts
         time.sleep(10)
 
-
 pwr_io_label = tk.Label(IO_Frame, text = 'VISA Power', font = label_font).place(x=25, y=50)
 pwr_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
 pwr_cbox.place(x=25, y=75)
-v_out_label = tk.Label(IO_Frame, text = 'Enable V-Output Power', font = label_font).place(x=200, y=50)
-v_out = ttk.Checkbutton(IO_Frame, text = 'T:Enable').place(x=200, y=75)
+
+
+v_out_var = tk.StringVar()
+v_out_label = tk.Label(IO_Frame, text = 'Enable V-Output Power (T: Enable)', font = label_font).place(x=200, y=50)
+v_out = ttk.Checkbutton(IO_Frame, 
+                        text = 'T:Enable',
+                        variable = v_out_var,
+                        onvalue="Enable",
+                        offvalue="Disable",
+                        command= lambda: toggle_check_btn(v_out, v_out_var),
+                        )
+v_out.place(x=200, y=75)
 
 osc_io_label = tk.Label(IO_Frame, text = 'VISA O-Scope', font = label_font).place(x=25, y=100)
 osc_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
 osc_cbox.place(x=25, y=125)
-cont_daq_label = tk.Label(IO_Frame, text='Enable Continuous Acquisition O-Scope', font = label_font).place(x=200, y=100)
-cont_daq = ttk.Checkbutton(IO_Frame, text = 'T: Enable')
-cont_daq.place(x=200, y=125)
+cont_osc_var = tk.StringVar()
+cont_osc_label = tk.Label(IO_Frame, text='Enable Continuous Acquisition O-Scope (T: Enable)', font = label_font).place(x=200, y=100)
+cont_osc = ttk.Checkbutton(IO_Frame, 
+                           text = 'T: Enable',
+                           variable=cont_osc_var,
+                           onvalue="Enable",
+                           offvalue="Disable",
+                           command= lambda: toggle_check_btn(cont_osc, cont_osc_var))
+cont_osc.place(x=200, y=125)
 
 dmm_io_label = tk.Label(IO_Frame, text = 'VISA DMM', font = label_font).place(x=25, y=150)
 dmm_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
 dmm_cbox.place(x=25, y=175)
-auto_range_label = tk.Label(IO_Frame, text = 'Auto Range DMM', font = label_font).place(x=200, y=150)
-auto_range = ttk.Checkbutton(IO_Frame, text = 'T: Enable').place(x=200, y=175)
+auto_range_var = tk.StringVar()
+auto_range_label = tk.Label(IO_Frame, text = 'Auto Range DMM (T: Enable)', font = label_font).place(x=200, y=150)
+auto_range = ttk.Checkbutton(IO_Frame, 
+                             text = 'T: Enable',
+                             variable=auto_range_var,
+                             onvalue="Enable",
+                             offvalue="Disable",
+                             command = lambda: toggle_check_btn(auto_range, auto_range_var))
+auto_range.place(x=200, y=175)
 
     #Power Supply Out Settings
 #Are CV mode and CC Mode mutually exclusive?
@@ -340,7 +381,8 @@ pressure_spinbox = tk.Spinbox(IO_Frame,
                               from_=0,
                               to = 800,
                               textvariable=init_pressure
-                              ).place(x=552, y=425, width=125)
+                              )
+pressure_spinbox.place(x=552, y=425, width=125)
 
 
     #Start/Stop Buttons
@@ -423,14 +465,17 @@ pressure_output_spnbx = tk.Spinbox(Disp_Frame,
                               ).place(x=250, y=350, width=125)
 
 #O-Scope Config Options
+reset_var = tk.StringVar()
 reset_label = tk.Label(Config1_Frame,
                        text = 'Reset (False)',
                        font = label_font,
                        ).place(x=50,y=30)
 reset_opt = ttk.Checkbutton(Config1_Frame, 
                             text="T: Enable",
+                            variable=reset_var,
                             onvalue="Enable",
-                            offvalue="Disable")
+                            offvalue="Disable",
+                            command= lambda: toggle_check_btn(reset_opt, reset_var))
 reset_opt.place(x=50,y=60)
 #channel_var
 channel_label = tk.Label(Config1_Frame,
@@ -449,42 +494,71 @@ timebase_label = tk.Label(Config1_Frame,
                           ).place(x=50, y=80)
 timebase_spnbox = tk.Spinbox(Config1_Frame,
                              from_=00,
+                             to = 1,
+                             increment=0.0001,
                              )
 timebase_spnbox.place(x=50,y=105)
+
 #trigger_lvl_var
 trigger_lvl_label = tk.Label(Config1_Frame,
                              text = "Trigger Level (-0.08 V)",
                              font = label_font
                              ).place(x=50, y=130)
 trigger_lvl_spnbox = tk.Spinbox(Config1_Frame,
-                                )
+                                from_ = -1,
+                                to = 1,
+                                increment=0.001)
 trigger_lvl_spnbox.place(x=50,y=155)
 #trigger_slope_var
 trigger_slope_label = tk.Label(Config1_Frame,
                                text = "Trigger Slope (1: Negative)",
                                font = label_font
                                ).place(x=50, y=180)
+trigger_slope_spnbox = tk.Spinbox(Config1_Frame,
+                                  values = ["Positive", "Negative", "Window"],
+                                  state='readonly')
+trigger_slope_spnbox.place(x=50, y=205)
 #timeout_var
 timeout_label = tk.Label(Config1_Frame,
                          text = "Timeout (600,000 ms)",
                          font = label_font
                          ).place(x=50, y=230)
+timeout_spnbox = tk.Spinbox(Config1_Frame,
+                           from_=0,
+                           to = 10000000,
+                           increment = 100
+                           )
+timeout_spnbox.place(x=50, y=255)
 #vert_off_var
 vert_off_label = tk.Label(Config1_Frame,
                           text = "Veritcal Offset (0 mV)",
                           font = label_font
                           ).place(x=50, y=280)
+vert_off_spnbox = tk.Spinbox(Config1_Frame,
+                             from_=0,
+                             to=100,
+                             )
+vert_off_spnbox.place(x=50, y=305)
 #vert_range_var
 vert_range_label = tk.Label(Config1_Frame,
                             text = "Vertical Range (0.15 V)",
                             font = label_font
                             ).place(x=50,y=330)
+vert_range_spnbox = tk.Spinbox(Config1_Frame,
+                               from_ =0,
+                               to = 100,
+                               increment=0.01)
+vert_range_spnbox.place(x=50, y=355)
 #holdoff_var
 holdoff_label = tk.Label(Config1_Frame,
                          text = "Holdoff Value (2E-8 s)",
                          font = label_font
                          ).place(x=50, y=380)
-
+holdoff_spnbox = tk.Spinbox(Config1_Frame,
+                            from_ = 0,
+                            to=1,
+                            increment=1e-8)
+holdoff_spnbox.place(x=50, y=405)
 #Power Config 
 config_frame_label = tk.Label(Config2_Frame,
                               text = "Serial Configuration Power",
