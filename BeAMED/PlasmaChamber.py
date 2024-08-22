@@ -14,6 +14,9 @@ from scipy import signal
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
 import logging
+import os
+
+PID = os.getpid()
 
 #Matplotlib Config
 matplotlib.use('TkAgg')
@@ -32,7 +35,7 @@ def start_log():
     handler.setLevel(logging.DEBUG)
     beamed_logger.addHandler(handler)
     beamed_logger.setLevel(logging.DEBUG)
-    log_message("MAIN", "INFO", "BeAMED Plasma Chamber debug log started")
+    log_message("MAIN", "INFO", f"BeAMED Plasma Chamber debug log started with pid: {PID}")
 
 def log_message(thread, level, message):
     beamed_logger.debug(f"{thread}: {time.strftime('%X', time.localtime())} - {level} - {message}")
@@ -107,6 +110,7 @@ def read_pressure(event: stop_all_event):
     '''Thread to continuously read pressure voltages and convert to real pressure.'''
     thread = "PRESSURE"
     level = "INFO"
+    log_message(thread, level, "starting continuous pressure reading")
     with nidaqmx.Task() as task:
         ai_channel = task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
         task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
@@ -156,7 +160,14 @@ def configure_oscilloscope():
                 level = "INFO"
                 log_message(thread, level, "connection to oscilloscope succeeded after second attempt")
     osc = rm.open_resource(osc_cbox.get())
-    print(osc.query('*IDN?'))
+    log_message(thread, level, f"connected to {osc.query('*IDN?')}")
+    channel = channel_var.get()[0]+channel_var.get()[-1]
+    log_message(thread, level, f"setting oscilloscope to channel {channel}")
+    osc.write(channel+":ATTN 1")
+    log_message(thread, level, f"setting vertical offset to {vert_off_var.get()} mV")
+    osc.write(channel+":OFST "+vert_off_var.get()+"V")
+    osc.close()
+    
     return
 
 def start():
@@ -477,14 +488,15 @@ reset_opt = ttk.Checkbutton(Config1_Frame,
                             offvalue="Disable",
                             command= lambda: toggle_check_btn(reset_opt, reset_var))
 reset_opt.place(x=50,y=60)
-#channel_var
+channel_var = tk.StringVar()
 channel_label = tk.Label(Config1_Frame,
                          text = "Channel (1)",
                          font = label_font
                          ).place(x=200, y=30)
 channel_spnbox = tk.Spinbox(Config1_Frame, 
                             values=['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'],
-                            state='readonly'
+                            state='readonly',
+                            textvariable = channel_var
                             )
 channel_spnbox.place(x=200, y=60)
 #timebase_var
@@ -529,7 +541,7 @@ timeout_spnbox = tk.Spinbox(Config1_Frame,
                            increment = 100
                            )
 timeout_spnbox.place(x=50, y=255)
-#vert_off_var
+vert_off_var = tk.StringVar()
 vert_off_label = tk.Label(Config1_Frame,
                           text = "Veritcal Offset (0 mV)",
                           font = label_font
@@ -537,6 +549,7 @@ vert_off_label = tk.Label(Config1_Frame,
 vert_off_spnbox = tk.Spinbox(Config1_Frame,
                              from_=0,
                              to=100,
+                             textvariable=vert_off_var
                              )
 vert_off_spnbox.place(x=50, y=305)
 #vert_range_var
