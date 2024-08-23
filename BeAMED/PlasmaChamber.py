@@ -85,17 +85,16 @@ config_error = Event() #event to identify errors with the configuration of a dev
 
 def check_events():
     '''Daemon thread to check for events in the backgournd to handle'''
-    while not stop_all_event.is_set() or not discharge_event.is_set():
+    while not stop_all_event.is_set() and not discharge_event.is_set():
         thread = "EVENT"
         if visa_error.is_set():
             level = "WARN"
-            #The following code will only work if the scolloscope is plugged into the USB0 spot on the computer. A more advanced loop would be needed to make this viable in all cases.
             log_message(thread, level, "VisaIOError excepted, searching for oscilloscope")
             osc_name = 'USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR'
             for resource in rm.list_resources():
                 if resource == osc_name:
                     visa_error.clear()
-                    root.after(0, osc_cbox.set(resource))
+                    root.after(0, osc_cbox.set(rm.list_resources_info()[resource][4]))
                 else:
                     continue
             if visa_error.is_set():
@@ -106,6 +105,11 @@ def check_events():
 
 
 #Functions
+def get_resource(alias):
+    for resource_tuple in rm.list_resources_info().values():
+        if alias in resource_tuple:
+            return resource_tuple[3]
+
 def read_pressure(event: stop_all_event):
     '''Thread to continuously read pressure voltages and convert to real pressure.'''
     thread = "PRESSURE"
@@ -127,8 +131,8 @@ def read_pressure(event: stop_all_event):
             if discharge_event.is_set():
                 level = "INFO"
                 log_message(thread, level, "discharge event triggered")
-                log_message(thread, level, f"Stopped Reading Pressure. Last Reading: {true_pressure}")
                 discharge_event.pressure = true_pressure
+                log_message(thread, level, f"Stopped Reading Pressure. Last Reading: {discharge_event.pressure}")
                 break
 
 def configure_power():
@@ -140,17 +144,19 @@ def configure_oscilloscope():
     '''Thread to configure oscilloscope. this is a non-daemonic, non-looping thread so it does can not be interrupted by the stop all function. '''
     thread = "OSC CFG"
     level = "INFO"
+    osc_name = get_resource(osc_cbox.get())
     for i in range(2):
         try: 
-            osc = rm.open_resource(osc_cbox.get())
+            osc = rm.open_resource(osc_name)
         except pyvisa.errors.VisaIOError:
             level = "ERROR"
             log_message(thread, level, "VisaIOError excepted: cannot continue until oscilloscope connected")
             visa_error.set()
             while visa_error.is_set():
                 time.sleep(1)
+            osc_name = get_resource(osc_cbox.get())
             try:
-                osc = rm.open_resource(osc_cbox.get())
+                osc = rm.open_resource(osc_name)
             except:
                 level = "ERROR"
                 log_message(thread, level, "connecting to oscilloscope failed after second attempt. ending process")
@@ -159,13 +165,28 @@ def configure_oscilloscope():
             else:
                 level = "INFO"
                 log_message(thread, level, "connection to oscilloscope succeeded after second attempt")
-    osc = rm.open_resource(osc_cbox.get())
+    osc = rm.open_resource(osc_name)
     log_message(thread, level, f"connected to {osc.query('*IDN?')}")
     channel = channel_var.get()[0]+channel_var.get()[-1]
     log_message(thread, level, f"setting oscilloscope to channel {channel}")
     osc.write(channel+":ATTN 1")
     log_message(thread, level, f"setting vertical offset to {vert_off_var.get()} mV")
-    osc.write(channel+":OFST "+vert_off_var.get()+"V")
+    osc.write(channel+":OFST "+vert_off_var.get()+"mV")
+    log_message(thread, level, f"setting vertical range to {vert_range_var.get()} V")
+    osc.write(channel+":VDIV "+vert_range_var.get()+"V")
+    log_message(thread, level, f"setting timebase to {timebase_var.get()} S")
+    osc.write("TDIV "+timebase_var.get()+"S")
+    osc.write("HPOS 0S")
+    if cont_osc_var.get() == "Enable":
+        mode = "NORM"
+    else:
+        mode = "AUTO"
+    log_message(channel, level, f"setting trigger mode to {mode}")
+    osc.write("TRMD "+mode)
+    log_message(channel, level, f"setting trigger level to {trigger_lvl_var.get()}V")
+    log_message(channel, level, f"setting trigger edge slope to {trigger_slope_var.get()}")
+    log_message(thread, level, f"setting trigger holdoff to {holdoff_var.get()}S")
+    osc.write("TRSE EDGE,SR,"+channel+",HT,TI,HV,"+holdoff_var.get()+"S")
     osc.close()
     
     return
@@ -251,17 +272,20 @@ trig_false_image.put(("green"), to=(0,0,49,49))
 
     #I/O selection for Oscilloscope, Power, and Digital Multimeter
 def check_IO():
-    IO_opts = rm.list_resources()
+    IO_opts = []
+    for i in rm.list_resources():
+        if rm.list_resources_info()[i][4] == None:
+            IO_opts.append(i)
+        else:
+            IO_opts.append(rm.list_resources_info()[i][4])
     return IO_opts
 
 def update_combo_box():
-    while True:
-        IO_opts = check_IO()
-        # Update the combo box with new resources
-        pwr_cbox['values'] = IO_opts
-        osc_cbox['values'] = IO_opts
-        dmm_cbox['values'] = IO_opts
-        time.sleep(10)
+    IO_opts = check_IO()
+    # Update the combo box with new resources
+    pwr_cbox['values'] = IO_opts
+    osc_cbox['values'] = IO_opts
+    dmm_cbox['values'] = IO_opts
 
 pwr_io_label = tk.Label(IO_Frame, text = 'VISA Power', font = label_font).place(x=25, y=50)
 pwr_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
@@ -499,43 +523,46 @@ channel_spnbox = tk.Spinbox(Config1_Frame,
                             textvariable = channel_var
                             )
 channel_spnbox.place(x=200, y=60)
-#timebase_var
+timebase_var = tk.StringVar()
 timebase_label = tk.Label(Config1_Frame,
                           text = "Timebase (0.0005 s)",
                           font = label_font
                           ).place(x=50, y=80)
 timebase_spnbox = tk.Spinbox(Config1_Frame,
+                             textvariable=timebase_var,
                              from_=00,
                              to = 1,
                              increment=0.0001,
                              )
 timebase_spnbox.place(x=50,y=105)
-
-#trigger_lvl_var
+trigger_lvl_var = tk.StringVar()
 trigger_lvl_label = tk.Label(Config1_Frame,
-                             text = "Trigger Level (-0.08 V)",
+                             text = "Trigger Level (0.05 V)",
                              font = label_font
                              ).place(x=50, y=130)
 trigger_lvl_spnbox = tk.Spinbox(Config1_Frame,
+                                textvariable=trigger_lvl_var,
                                 from_ = -1,
                                 to = 1,
                                 increment=0.001)
 trigger_lvl_spnbox.place(x=50,y=155)
-#trigger_slope_var
+trigger_slope_var = tk.StringVar()
 trigger_slope_label = tk.Label(Config1_Frame,
-                               text = "Trigger Slope (1: Negative)",
+                               text = "Trigger Slope (0: Positive)",
                                font = label_font
                                ).place(x=50, y=180)
 trigger_slope_spnbox = tk.Spinbox(Config1_Frame,
+                                  textvariable=trigger_slope_var,
                                   values = ["Positive", "Negative", "Window"],
                                   state='readonly')
 trigger_slope_spnbox.place(x=50, y=205)
-#timeout_var
+timeout_var = tk.StringVar()
 timeout_label = tk.Label(Config1_Frame,
                          text = "Timeout (600,000 ms)",
                          font = label_font
                          ).place(x=50, y=230)
 timeout_spnbox = tk.Spinbox(Config1_Frame,
+                            textvariable=timeout_var,
                            from_=0,
                            to = 10000000,
                            increment = 100
@@ -552,22 +579,24 @@ vert_off_spnbox = tk.Spinbox(Config1_Frame,
                              textvariable=vert_off_var
                              )
 vert_off_spnbox.place(x=50, y=305)
-#vert_range_var
+vert_range_var = tk.StringVar()
 vert_range_label = tk.Label(Config1_Frame,
                             text = "Vertical Range (0.15 V)",
                             font = label_font
                             ).place(x=50,y=330)
 vert_range_spnbox = tk.Spinbox(Config1_Frame,
+                               textvariable=vert_range_var,
                                from_ =0,
                                to = 100,
                                increment=0.01)
 vert_range_spnbox.place(x=50, y=355)
-#holdoff_var
+holdoff_var = tk.StringVar()
 holdoff_label = tk.Label(Config1_Frame,
-                         text = "Holdoff Value (2E-8 s)",
+                         text = "Holdoff Value (1E-7 s)",
                          font = label_font
                          ).place(x=50, y=380)
 holdoff_spnbox = tk.Spinbox(Config1_Frame,
+                            textvariable=holdoff_var,
                             from_ = 0,
                             to=1,
                             increment=1e-8)
