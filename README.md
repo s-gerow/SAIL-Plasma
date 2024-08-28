@@ -16,28 +16,29 @@ The GettingStarted.md file will walk you through some of the skills required to 
 
 *1a. Introduction to Python*  
 This section will teach you the very basics of Python and give you two programs to run on a Lego SPIKE Prime smart brick.
-* Python Basics
-* Project 0-1: First Project
+* [1a-1 Python Basics](./PyTHAGORA/Module1_BaseTrack/1a-1%20Python%20Basics.ipynb)
+* [1a-2 Project 0: First Project](./PyTHAGORA/Module1_BaseTrack/1a-2%20Project%200-1%20First%20Project_MASTER.ipynb)
 
 *1b. Lists, Tuples, and Dictionaries*  
 This section will teach you how lists and other list-like data types work and can be used
-* Lists
-* Tuples
-* Dictionaries
+* [1b-1 Lists](./PyTHAGORA/Module1_BaseTrack/1b-1%20Lists.ipynb)
+* [1b-2 Tuples](./PyTHAGORA/Module1_BaseTrack/1b-2%20Tuples.ipynb)
+* [1b-3 Dictionaries](./PyTHAGORA/Module1_BaseTrack/1b-3%20Dictionaries.ipynb)
 
 *1c. Loops*  
 This section will cover each type of control structure/loop in depth and finish with a project file which will walk you through a few small loop related projects.
-* If Statements
-* For Loops
-* While Loops
-* Project 1: Loops Mini-Project
+* [1c-1 If Statements](./PyTHAGORA/Module1_BaseTrack/1c-1%20If%20Statements.ipynb)
+* [1c-2 For Loops](./PyTHAGORA/Module1_BaseTrack/1c-2%20For%20Loops.ipynb)
+* [1c-3 While Loops](./PyTHAGORA/Module1_BaseTrack/1c-3%20While%20Loops.ipynb)
+* [1c-4 Project 1: Loops Project](./PyTHAGORA/Module1_BaseTrack/1c-4%20Project%201%20Loops_MASTER.ipynb)
 * Other Control Structures and Statements
 
 *1d. Classes and Functions*  
 This is the final sections of the Base Track and will cover functions and classes which will allow you to begin building modules and packages.
-* Functions
-* Classes
-* Project 2: Classes
+* [1d-1 Functions](./PyTHAGORA/Module1_BaseTrack/1d-1%20Functions.ipynb)
+* [1d-2 File IO Project](./PyTHAGORA/Module1_BaseTrack/1d-2%20Project%202%20DEBUG%20File_MASTER.ipynb)
+* [1d-3 Classes](./PyTHAGORA/Module1_BaseTrack/1d-3%20Classes.ipynb)
+* [1d-4 Project 2: Classes Project](./PyTHAGORA/Module1_BaseTrack/1d-4%20Project%202%20Classes_MASTER.ipynb)
 
 *1e. Modules, Packages, and Open-Source Development*  
 An additional mini-track which will teach you about how modules and packages work, as well as introduce you to Github and general good practices when developing software, particularly in the open-source community. This will also include some resources from the Python in HelioPhysics Community and other open source communities.
