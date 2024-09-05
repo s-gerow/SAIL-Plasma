@@ -1,0 +1,95 @@
+#O-Scope Config Options
+reset_var = tk.StringVar()
+reset_label = tk.Label(Config1_Frame,
+                       text = 'Reset (False)',
+                       font = label_font,
+                       ).place(x=50,y=30)
+reset_opt = ttk.Checkbutton(Config1_Frame, 
+                            text="T: Enable",
+                            variable=reset_var,
+                            onvalue="Enable",
+                            offvalue="Disable",
+                            command= lambda: toggle_check_btn(reset_opt, reset_var))
+reset_opt.place(x=50,y=60)
+#channel_var
+channel_label = tk.Label(Config1_Frame,
+                         text = "Channel (1)",
+                         font = label_font
+                         ).place(x=200, y=30)
+channel_spnbox = tk.Spinbox(Config1_Frame, 
+                            values=['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'],
+                            state='readonly'
+                            )
+channel_spnbox.place(x=200, y=60)
+#timebase_var
+timebase_label = tk.Label(Config1_Frame,
+                          text = "Timebase (0.0005 s)",
+                          font = label_font
+                          ).place(x=50, y=80)
+timebase_spnbox = tk.Spinbox(Config1_Frame,
+                             from_=00,
+                             to = 1,
+                             increment=0.0001,
+                             )
+timebase_spnbox.place(x=50,y=105)
+
+#trigger_lvl_var
+trigger_lvl_label = tk.Label(Config1_Frame,
+                             text = "Trigger Level (-0.08 V)",
+                             font = label_font
+                             ).place(x=50, y=130)
+trigger_lvl_spnbox = tk.Spinbox(Config1_Frame,
+                                from_ = -1,
+                                to = 1,
+                                increment=0.001)
+trigger_lvl_spnbox.place(x=50,y=155)
+#trigger_slope_var
+trigger_slope_label = tk.Label(Config1_Frame,
+                               text = "Trigger Slope (1: Negative)",
+                               font = label_font
+                               ).place(x=50, y=180)
+trigger_slope_spnbox = tk.Spinbox(Config1_Frame,
+                                  values = ["Positive", "Negative", "Window"],
+                                  state='readonly')
+trigger_slope_spnbox.place(x=50, y=205)
+#timeout_var
+timeout_label = tk.Label(Config1_Frame,
+                         text = "Timeout (600,000 ms)",
+                         font = label_font
+                         ).place(x=50, y=230)
+timeout_spnbox = tk.Spinbox(Config1_Frame,
+                           from_=0,
+                           to = 10000000,
+                           increment = 100
+                           )
+timeout_spnbox.place(x=50, y=255)
+#vert_off_var
+vert_off_label = tk.Label(Config1_Frame,
+                          text = "Veritcal Offset (0 mV)",
+                          font = label_font
+                          ).place(x=50, y=280)
+vert_off_spnbox = tk.Spinbox(Config1_Frame,
+                             from_=0,
+                             to=100,
+                             )
+vert_off_spnbox.place(x=50, y=305)
+#vert_range_var
+vert_range_label = tk.Label(Config1_Frame,
+                            text = "Vertical Range (0.15 V)",
+                            font = label_font
+                            ).place(x=50,y=330)
+vert_range_spnbox = tk.Spinbox(Config1_Frame,
+                               from_ =0,
+                               to = 100,
+                               increment=0.01)
+vert_range_spnbox.place(x=50, y=355)
+#holdoff_var
+holdoff_label = tk.Label(Config1_Frame,
+                         text = "Holdoff Value (2E-8 s)",
+                         font = label_font
+                         ).place(x=50, y=380)
+holdoff_spnbox = tk.Spinbox(Config1_Frame,
+                            from_ = 0,
+                            to=1,
+                            increment=1e-8)
+holdoff_spnbox.place(x=50, y=405)
