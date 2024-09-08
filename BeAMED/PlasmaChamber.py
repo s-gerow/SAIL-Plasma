@@ -135,8 +135,43 @@ def read_pressure(event: stop_all_event):
                 log_message(thread, level, f"Stopped Reading Pressure. Last Reading: {discharge_event.pressure}")
                 break
 
+def MFC_start():
+    '''Function will run on MAIN after all external systems are configured. Function checks the pressure and activates MFC based on gas/target pressure settings to backfill chamber before experiment begins.'''
+    #target_min_pressure.set(100)
+    #target_exp_pressure.set(700)
+    run_bool = True
+    gas = "gas"
+    state = 0
+
+    with nidaqmx.Task() as task:
+        ao_channel0 = task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao0", min_val=0,max_val=5)
+        ao_channel1 = task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", min_val=0, max_val=5)
+        if gas != "air":
+            while run_bool:
+                match state:
+                    case 0:
+                        print("case 0")
+                        #if pressure.get() > target_min_pressure.get():
+                        #    task.write([[0],[0]],auto_start=True, timeout=10)
+                        #else:
+                        #    state = 1
+                    case 1:
+                        print("case 1")
+                        #if pressure.get() < target_exp_pressure.get():
+                        #    task.write([[5],[3]],auto_start=True, timeout=10)
+                        #else:
+                        #    task.write([[0],[0]],auto_start=True, timeout=10)
+                        #    state = 2
+                    case 2:
+                        print("case 2")
+                        print("begin dischage")
+                        time.sleep(2)
+                        case = 0
+                        run_bool = False
+                        break
+
 def configure_power():
-    '''Thread to read through '''
+    '''Thread to configure power supply. Non-daemonic, non-looping.'''
     thread = "PWR CFG"
     level = "INFO"
 
@@ -181,15 +216,18 @@ def configure_oscilloscope():
         mode = "NORM"
     else:
         mode = "AUTO"
-    log_message(channel, level, f"setting trigger mode to {mode}")
+    log_message(thread, level, f"setting trigger mode to {mode}")
     osc.write("TRMD "+mode)
-    log_message(channel, level, f"setting trigger level to {trigger_lvl_var.get()}V")
-    log_message(channel, level, f"setting trigger edge slope to {trigger_slope_var.get()}")
+    log_message(thread, level, f"setting trigger level to {trigger_lvl_var.get()}V")
+    log_message(thread, level, f"setting trigger edge slope to {trigger_slope_var.get()}")
     log_message(thread, level, f"setting trigger holdoff to {holdoff_var.get()}S")
     osc.write("TRSE EDGE,SR,"+channel+",HT,TI,HV,"+holdoff_var.get()+"S")
     osc.close()
-    
-    return
+    log_message(thread, level, "Oscilloscope Configured Successfully")
+
+def configure_dmm():
+    thread = "DMM CFG"
+    level = "INFO"
 
 def start():
     '''This function defines the START Button which sets the configuartions for each device then begins the experiment.'''
@@ -270,9 +308,9 @@ trig_false_image = tk.PhotoImage(width=50, height=50)
 trig_true_image.put(("lime"), to=(0,0,49,49))
 trig_false_image.put(("green"), to=(0,0,49,49))
 
-    #I/O selection for Oscilloscope, Power, and Digital Multimeter
+#I/O selection for Oscilloscope, Power, and Digital Multimeter
 def check_IO():
-    IO_opts = []
+    IO_opts = ["Refresh"]
     for i in rm.list_resources():
         if rm.list_resources_info()[i][4] == None:
             IO_opts.append(i)
@@ -280,17 +318,50 @@ def check_IO():
             IO_opts.append(rm.list_resources_info()[i][4])
     return IO_opts
 
-def update_combo_box():
+def update_combo_box(event, cbox_name):
     IO_opts = check_IO()
     # Update the combo box with new resources
-    pwr_cbox['values'] = IO_opts
-    osc_cbox['values'] = IO_opts
-    dmm_cbox['values'] = IO_opts
+    if cbox_name.get() == "Refresh":
+        pwr_cbox['values'] = IO_opts
+        osc_cbox['values'] = IO_opts
+        dmm_cbox['values'] = IO_opts
+        cbox_name.set("")
 
 pwr_io_label = tk.Label(IO_Frame, text = 'VISA Power', font = label_font).place(x=25, y=50)
-pwr_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
+pwr_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO(),)
+pwr_cbox.bind('<<ComboboxSelected>>', lambda event: update_combo_box(event, pwr_cbox))
 pwr_cbox.place(x=25, y=75)
 
+dmm_io_label = tk.Label(IO_Frame, text = 'VISA DMM', font = label_font).place(x=25, y=150)
+dmm_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
+dmm_cbox.bind('<<ComboboxSelected>>', lambda event: update_combo_box(event, dmm_cbox))
+dmm_cbox.place(x=25, y=175)
+
+osc_io_label = tk.Label(IO_Frame, text = 'VISA O-Scope', font = label_font).place(x=25, y=100)
+osc_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
+osc_cbox.bind('<<ComboboxSelected>>', lambda event: update_combo_box(event, osc_cbox))
+osc_cbox.place(x=25, y=125)
+
+
+cont_osc_var = tk.StringVar()
+cont_osc_label = tk.Label(IO_Frame, text='Enable Continuous Acquisition O-Scope (T: Enable)', font = label_font).place(x=200, y=100)
+cont_osc = ttk.Checkbutton(IO_Frame, 
+                           text = 'T: Enable',
+                           variable=cont_osc_var,
+                           onvalue="Enable",
+                           offvalue="Disable",
+                           command= lambda: toggle_check_btn(cont_osc, cont_osc_var))
+cont_osc.place(x=200, y=125)
+
+auto_range_var = tk.StringVar()
+auto_range_label = tk.Label(IO_Frame, text = 'Auto Range DMM (T: Enable)', font = label_font).place(x=200, y=150)
+auto_range = ttk.Checkbutton(IO_Frame, 
+                             text = 'T: Enable',
+                             variable=auto_range_var,
+                             onvalue="Enable",
+                             offvalue="Disable",
+                             command = lambda: toggle_check_btn(auto_range, auto_range_var))
+auto_range.place(x=200, y=175)
 
 v_out_var = tk.StringVar()
 v_out_label = tk.Label(IO_Frame, text = 'Enable V-Output Power (T: Enable)', font = label_font).place(x=200, y=50)
@@ -302,32 +373,6 @@ v_out = ttk.Checkbutton(IO_Frame,
                         command= lambda: toggle_check_btn(v_out, v_out_var),
                         )
 v_out.place(x=200, y=75)
-
-osc_io_label = tk.Label(IO_Frame, text = 'VISA O-Scope', font = label_font).place(x=25, y=100)
-osc_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
-osc_cbox.place(x=25, y=125)
-cont_osc_var = tk.StringVar()
-cont_osc_label = tk.Label(IO_Frame, text='Enable Continuous Acquisition O-Scope (T: Enable)', font = label_font).place(x=200, y=100)
-cont_osc = ttk.Checkbutton(IO_Frame, 
-                           text = 'T: Enable',
-                           variable=cont_osc_var,
-                           onvalue="Enable",
-                           offvalue="Disable",
-                           command= lambda: toggle_check_btn(cont_osc, cont_osc_var))
-cont_osc.place(x=200, y=125)
-
-dmm_io_label = tk.Label(IO_Frame, text = 'VISA DMM', font = label_font).place(x=25, y=150)
-dmm_cbox = ttk.Combobox(IO_Frame, state = 'readonly', values = check_IO())
-dmm_cbox.place(x=25, y=175)
-auto_range_var = tk.StringVar()
-auto_range_label = tk.Label(IO_Frame, text = 'Auto Range DMM (T: Enable)', font = label_font).place(x=200, y=150)
-auto_range = ttk.Checkbutton(IO_Frame, 
-                             text = 'T: Enable',
-                             variable=auto_range_var,
-                             onvalue="Enable",
-                             offvalue="Disable",
-                             command = lambda: toggle_check_btn(auto_range, auto_range_var))
-auto_range.place(x=200, y=175)
 
     #Power Supply Out Settings
 #Are CV mode and CC Mode mutually exclusive?
@@ -418,6 +463,7 @@ pressure_spinbox = tk.Spinbox(IO_Frame,
                               textvariable=init_pressure
                               )
 pressure_spinbox.place(x=552, y=425, width=125)
+
 
 
     #Start/Stop Buttons
