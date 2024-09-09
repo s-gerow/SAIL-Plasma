@@ -88,20 +88,10 @@ def check_events():
     while not stop_all_event.is_set() and not discharge_event.is_set():
         thread = "EVENT"
         if visa_error.is_set():
-            level = "WARN"
-            log_message(thread, level, "VisaIOError excepted, searching for oscilloscope")
-            osc_name = 'USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR'
-            for resource in rm.list_resources():
-                if resource == osc_name:
-                    visa_error.clear()
-                    root.after(0, osc_cbox.set(rm.list_resources_info()[resource][4]))
-                else:
-                    continue
-            if visa_error.is_set():
-                level = "ERROR"
-                log_message(thread, level, "unable to find oscilloscope, stopping process.")
-                stop_all_event.set()
-                visa_error.clear()
+            level = "ERROR"
+            log_message(thread, level, "unable to find device, stopping process.")
+            stop_all_event.set()
+            visa_error.clear()
 
 
 #Functions
@@ -180,26 +170,14 @@ def configure_oscilloscope():
     thread = "OSC CFG"
     level = "INFO"
     osc_name = get_resource(osc_cbox.get())
-    for i in range(2):
-        try: 
-            osc = rm.open_resource(osc_name)
-        except pyvisa.errors.VisaIOError:
-            level = "ERROR"
-            log_message(thread, level, "VisaIOError excepted: cannot continue until oscilloscope connected")
-            visa_error.set()
-            while visa_error.is_set():
-                time.sleep(1)
-            osc_name = get_resource(osc_cbox.get())
-            try:
-                osc = rm.open_resource(osc_name)
-            except:
-                level = "ERROR"
-                log_message(thread, level, "connecting to oscilloscope failed after second attempt. ending process")
-                stop_all_event.set()
-                return
-            else:
-                level = "INFO"
-                log_message(thread, level, "connection to oscilloscope succeeded after second attempt")
+    try: 
+        osc = rm.open_resource(osc_name)
+    except pyvisa.errors.VisaIOError:
+        level = "ERROR"
+        log_message(thread, level, "VisaIOError excepted: cannot continue until oscilloscope connected")
+        visa_error.set()
+        while visa_error.is_set():
+            time.sleep(2)
     osc = rm.open_resource(osc_name)
     log_message(thread, level, f"connected to {osc.query('*IDN?')}")
     channel = channel_var.get()[0]+channel_var.get()[-1]
