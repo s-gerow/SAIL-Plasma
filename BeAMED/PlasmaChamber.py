@@ -5,18 +5,12 @@ import pyvisa
 import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
-from pylablib.devices import NI
 import time
-import threading
-from threading import Thread, Event, active_count
+from threading import Thread, Event
 import numpy as np
-from scipy import signal
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
 import logging
-import os
-
-PID = os.getpid()
 
 #Matplotlib Config
 matplotlib.use('TkAgg')
@@ -35,7 +29,7 @@ def start_log():
     handler.setLevel(logging.DEBUG)
     beamed_logger.addHandler(handler)
     beamed_logger.setLevel(logging.DEBUG)
-    log_message("MAIN", "INFO", f"BeAMED Plasma Chamber debug log started with pid: {PID}")
+    log_message("MAIN", "INFO", f"BeAMED Plasma Chamber debug log started")
 
 def log_message(thread, level, message):
     beamed_logger.debug(f"{thread}: {time.strftime('%X', time.localtime())} - {level} - {message}")
