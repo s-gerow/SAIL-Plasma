@@ -24,26 +24,40 @@ pwr.write("SOUR:VOLT:PROT:LEV 20")
 pwr.write("SOUR:CURR:LEV:IMM:AMPL 0.5")
 
 #The following lines mirror the configuration in Labview
-dmm.write("RST")
+dmm.write("*RST")
 dmm.write(':SENS:FUNC "VOLT:DC"')
-dmm.write("SENS:VOLT:RANG:AUTO ON")
-#dmm.write(':SENS:VOLT:NPLC 1') #Default 1
-#dmm.write(':SENS:VOLT:LINE:SYNC OFF') #Default OFF
-#dmm.write("SENS:VOLT:AZER ON")#Default ON
-dmm.write('CALC:VOLT:LIM1:STAT OFF') #Default OFF
-dmm.write('CACL:VOLT:LIM1:CLE:AUTO OFF') #Limit Number in GUI is 1 (LIM_), Default ON
-dmm.write('CALC:VOLT:LIM1:LOW 0') #Because the voltage limit is disabled this should not be needed but may as well include it because maybe one day we do
-dmm.write('CALC:VOLT:LIM1:UPP 0')
-dmm.write('TRAC:FILL:MODE "defbuffer1"') #continuous fill
-dmm.write('TRAC:POIN "defbuffer1"') #Buffer Size 10
+dmm.write(":SENS:VOLT:RANG:AUTO ON")
+##dmm.write(':SENS:VOLT:NPLC 1') #Default 1
+##dmm.write(':SENS:VOLT:LINE:SYNC OFF') #Default OFF
+##dmm.write("SENS:VOLT:AZER ON")#Default ON
+dmm.write(':CALC2:VOLT:LIM1:STAT OFF') #Default OFF
+dmm.write(':CALC2:VOLT:LIM1:CLE:AUTO OFF') #Limit Number in GUI is 1 (LIM_), Default ON
+dmm.write(':CALC2:VOLT:LIM1:LOW 0') #Because the voltage limit is disabled this should not be needed but may as well include it because maybe one day we do
+dmm.write(':CALC2:VOLT:LIM1:UPP 0')
+dmm.write(':TRAC:FILL:MODE CONT, "defbuffer1"') #continuous fill
+dmm.write(':TRAC:POIN 10, "defbuffer1"') #Buffer Size 10
 
 
 def increase_voltage():
-    for i in np.arange(0,20,0.5):
-        #pwr.write(f"SOUR:VOLT:LEV:IMM:AMPL {i}")
+    pwr.write("OUTP:STAT:IMM ON")
+    for i in np.arange(0,5,0.25):
+        pwr.write(f"SOUR:VOLT:LEV:IMM:AMPL {i}")
         root.after(0, lambda: voltage_level_var.set(pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
-        root.after(5, lambda: dmm_reading_var.set(dmm.query(":READ?")))
-        time.sleep(1)
+        #root.after(0, lambda: voltage_level_var.set(i))
+        root.after(0, lambda: dmm_reading_var.set(dmm.query(":READ?")))
+        time.sleep(0.5)
+    for i in np.flip(np.arange(0, 5, 0.25)):
+        pwr.write(f"SOUR:VOLT:LEV:IMM:AMPL {i}")
+        root.after(0, lambda: voltage_level_var.set(pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
+        #root.after(0, lambda: voltage_level_var.set(i))
+        root.after(0, lambda: dmm_reading_var.set(dmm.query(":READ?")))
+        time.sleep(0.5)
+    pwr.write("SOUR:VOLT:LEV:IMM:AMPL 0")
+    pwr.write("OUTP:STAT:IMM OFF")
+    dmm.close()
+    pwr.close()
+    rm.close()
+    root.destroy()
 
 voltage_thread = Thread(target=increase_voltage, daemon = True)
 
@@ -58,5 +72,17 @@ tk.Spinbox(root,
            textvariable=dmm_reading_var).grid(row = 2, column = 2, padx = 5, pady = 5)
 
 start = tk.Button(text = "start", command = voltage_thread.start).grid(row=3, column = 1, padx = 5, pady = 5)
+
+
+def clean_exit():
+    pwr.write("ABOR")
+    pwr.write("SOUR:VOLT:LEV:IMM:AMPL 0")
+    pwr.write("OUTP:STAT:IMM OFF")
+    dmm.close()
+    pwr.close()
+    rm.close()
+    root.destroy()
+
+root.protocol('WM_DELETE_WINDOW', clean_exit) 
 
 root.mainloop()
