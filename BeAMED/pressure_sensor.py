@@ -63,7 +63,7 @@ class pressure_gui(tk.Tk):
             ai_channel = read.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
             read.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
             
-            while run_bool:
+            while True:
                 pressure_sensor_voltage = np.array(read.read(100))
                 unfiltered_avg = np.median(pressure_sensor_voltage)
                 true_pressure = 10**(unfiltered_avg - 5)
@@ -109,6 +109,7 @@ class pressure_gui(tk.Tk):
                             break
     
     def test_run(self):
+        
         read = Thread(target = self.read_pressure, daemon=True)
         read.start()
 
@@ -121,5 +122,5 @@ class pressure_gui(tk.Tk):
 
 if __name__ == "__main__":
     pressure = pressure_gui()
-    pressure.mainloop()
     pressure.test_run()
+    pressure.mainloop()

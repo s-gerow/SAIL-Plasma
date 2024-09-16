@@ -200,6 +200,36 @@ def configure_oscilloscope():
 def configure_dmm():
     thread = "DMM CFG"
     level = "INFO"
+    dmm_name = get_resource(dmm_cbox.get())
+    log_message(thread, level, dmm_name)
+    '''
+    try: 
+        dmm = rm.open_resource(dmm_name)
+    except pyvisa.errors.VisaIOError:
+        level = "ERROR"
+        log_message(thread, level, "VisaIOError excepted: cannot continue until dmm connected")
+        visa_error.set()
+        while visa_error.is_set():
+            time.sleep(2)
+    dmm = rm.open_resource(dmm_name)
+    log_message(thread, level, f"connected to {dmm.query('*IDN?')}")
+    log_message(thread, level, f"configuring digital multimeter to defaults")
+    #The following lines mirror the configuration in Labview
+    dmm.write("RST")
+    dmm.write(':SENS:FUNC "VOLT:DC"')
+    dmm.write("SENS:VOLT:RANG:AUTO ON")
+    #dmm.write(':SENS:VOLT:NPLC 1') #Default 1
+    #dmm.write(':SENS:VOLT:LINE:SYNC OFF') #Default OFF
+    #dmm.write("SENS:VOLT:AZER ON")#Default ON
+    dmm.write('CALC:VOLT:LIM1:STAT OFF') #Default OFF
+    dmm.write('CACL:VOLT:LIM1:CLE:AUTO OFF') #Limit Number in GUI is 1 (LIM_), Default ON
+    dmm.write('CALC:VOLT:LIM1:LOW 0') #Because the voltage limit is disabled this should not be needed but may as well include it because maybe one day we do
+    dmm.write('CALC:VOLT:LIM1:UPP 0')
+    dmm.write('TRAC:FILL:MODE "defbuffer1"') #continuous fill
+    dmm.write('TRAC:POIN "defbuffer1"') #Buffer Size 10\
+    dmm.close()
+    log_message(thread, level, f"dmm successfuly configured")
+    '''
 
 def start():
     '''This function defines the START Button which sets the configuartions for each device then begins the experiment.'''
@@ -211,6 +241,8 @@ def start():
     global live_pressure
     live_pressure = Thread(target = read_pressure, args = (stop_all_event,))
     configure = Thread(target=configure_oscilloscope)
+    configure.start()
+    configure = Thread(target=configure_dmm)
     configure.start()
     live_pressure.start()
 

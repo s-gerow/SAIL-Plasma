@@ -13,6 +13,7 @@ __pycache__/
 *.hdr
 *.stl
 *.TAB
+*.txt
 
 #MACOS
 *.DS_Store
