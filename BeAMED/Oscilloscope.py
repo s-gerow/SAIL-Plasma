@@ -26,19 +26,38 @@ def osc_cmd_builder(function, channel, values):
         case "TRSE":
             '''values = [trigger_type, hold_type, hold_value]'''
             command_string = function+" "+values[0]+",SR,"+channel+",HT,"+values[1]+",HV,"+str(values[2])+"S"
+        case "TRLV":
+            command_string = channel+":"+function+" "+str(values[0])+"V"
     return command_string
 
 values = ["Channel 1", 1]
 
-print(osc_cmd_builder("ATTN", "Channel 1", values))
-print(osc_cmd_builder("OFST", "Channel 1", [0]))
-print(osc_cmd_builder("VDIV", "Channel 1", [1]))
-print(osc_cmd_builder("TDIV", "Channel 1", [5E-4]))
-print(osc_cmd_builder("HPOS", "Channel 1", [0]))
-print(osc_cmd_builder("TRMD", "Channel 1", ["NORM"]))
-print(osc_cmd_builder("TRSE", "Channel 1", ["EDGE", "TI", 2E-8]))
+rm = pyvisa.ResourceManager()
+osc = rm.open_resource("USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR")
 
+osc.write(osc_cmd_builder("ATTN", "Channel 1", [1]))
+#osc.write(osc_cmd_builder("OFST", "Channel 1", [0]))
+osc.write(osc_cmd_builder("VDIV", "Channel 1", [0.15]))
+osc.write(osc_cmd_builder("TDIV", "Channel 1", [5E-4]))
+osc.write(osc_cmd_builder("HPOS", "Channel 1", [0]))
+#osc.write(osc_cmd_builder("TRMD", "Channel 1", ["NORM"]))
+#osc.write(osc_cmd_builder("TRLV", "Channel 1", [0.05]))
+#osc.write(osc_cmd_builder("TRSE", "Channel 1", ["EDGE", "TI", 1E-7]))
 
+osc.write('DATASOURCE CHANNEL1')
+osc.write('DATA:ENCDG SRI')
+osc.write('DATA:WIDTH 2')
+osc.write('DATA:START 0')
+osc.write('DATA: STOP 1000')
+#data_ch1 = np.array(osc.query_binary_values('CURVE?', datatype='h', is_big_endian=False\
+
+#osc.write("C1:WF? DAT2")
+osc.write("C1:WF? DAT2")
+wf = osc.read_raw()
+print(wf)
+osc.close()
+#while osc.query("SAST?") != "Trig'd":
+    #print("not triggered")
 
 
 
