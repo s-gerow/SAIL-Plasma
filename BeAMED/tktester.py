@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog as fd
 import csv
 import os
 
@@ -30,10 +31,14 @@ class Config_Frame(tk.Frame):
             for i, row in enumerate(csv.reader(f,delimiter='\t')):
                 if i == 0:
                     continue
-                self.options.__setitem__(row[0],(row[1],row[2]))
-                tk.Label(self,text = row[0]).grid(row=i, column=0, padx=5, pady=5)
+                config_name = row[0]
+                default_value = row[1]
+                pyvisa_command = row[2]
+                self.options.__setitem__(config_name,[default_value,pyvisa_command])
+                tk.Label(self,text = config_name).grid(row=i, column=0, padx=5, pady=5)
                 tk.Spinbox(self).grid(row=i, column = 2, padx=5, pady=5)
-        
+        tk.Button(text="print configs", command=lambda: print(self.get_configs())).pack()
+
     def get_name(self):
         return self.name
 
@@ -54,8 +59,8 @@ class App(tk.Tk):
         self.config_frames = {}
 
         ttk.Button(self,
-                   text="open new window",
-                   command=self.open_window).pack()
+                   text="open config files",
+                   command=self.import_configs).pack()
         
     def open_window(self):
         window = Window(self)
@@ -69,12 +74,15 @@ class App(tk.Tk):
     def get_config_frame(self, frame):
         return self.config_frames.get(frame)
 
-
+    def import_configs(self):
+        filenames = fd.askopenfilenames()
+        for file in filenames:
+            self.create_config_frame(file)
 
 if __name__ == "__main__":
     app = App()
-    print(os.listdir())
-    app.create_config_frame("./SAIL-Plasma/BeAMED/example_config.txt")
-    frame = app.get_config_frame("example_config")
-    print(frame.get_configs())
+    #print(os.listdir())
+    #app.create_config_frame(r"C:\Users\gerows\Python\SAIL-Plasma\BeAMED\example_config.txt")
+    #frame = app.get_config_frame("example_config")
+    #print(frame.get_configs())
     app.mainloop()
