@@ -1,16 +1,34 @@
-#Interface for Plasma Chamber
+#import system default packages
+import sys
+import subprocess
+import importlib.metadata
 import tkinter as tk
 from tkinter import ttk
+import time
+from threading import Thread, Event
+import logging
+
+# Define additional required packages
+required = {'pyvisa', 'matplotlib', 'numpy', 'nidaqmx'}
+# Get installed packages
+installed = {pkg.metadata['Name'].lower() for pkg in importlib.metadata.distributions()}
+# Find missing packages
+missing = required - installed
+if missing:
+    # Upgrade pip
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip'])
+    # Install missing packages
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])
+
+
+#Interface for Plasma Chamber
 import pyvisa
 import matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
-import time
-from threading import Thread, Event
 import numpy as np
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
-import logging
 
 #Matplotlib Config
 matplotlib.use('TkAgg')
