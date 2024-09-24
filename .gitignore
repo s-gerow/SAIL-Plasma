@@ -27,3 +27,6 @@ PyTHAGORA/CourseFlowchart.py
 
 #BeAMED Files
 *.log
+
+#other
+.vscode
