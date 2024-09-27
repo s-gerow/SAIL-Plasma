@@ -141,9 +141,9 @@ class Oscilloscope_Figure_Maker(tk.Tk):
 
 
 
-
-app = Oscilloscope_Figure_Maker()
-app.mainloop()
+if __name__ == "__main__":
+    app = Oscilloscope_Figure_Maker()
+    app.mainloop()
 
 
 
