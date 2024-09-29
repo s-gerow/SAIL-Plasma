@@ -33,6 +33,7 @@ class Experiment():
 
         tk.Label(IOFrame, text="ioframe").pack()
         tk.Label(DisplayFrame, text="displayframe").pack()
+
     
     def start_log(self):
         handler = logging.FileHandler('debug.log', mode = 'w')
@@ -62,6 +63,8 @@ class Experiment():
             self.osc_cbox['values'] = IO_opts
             self.dmm_cbox['values'] = IO_opts
             cbox_name.set("")
+        else:
+            self.parent.generate_configuration_frame(filename= cbox_name.get())
     
     def run_experiment(self, event = None):
         print("Running BeAMED Experiment")

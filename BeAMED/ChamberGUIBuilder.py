@@ -119,10 +119,15 @@ class ChamberApp(tk.Tk):
         self.menubar.deviceMenu.add_command(label="New Device", command=self.generate_configuration_frame)
         self.config(menu=self.menubar)
 
-    def generate_configuration_frame(self):
-        filepath = fd.askopenfilename()
-        filename =os.path.splitext(os.path.basename(filepath))[0]
+    def generate_configuration_frame(self, filename=None):
+        if filename == None:
+            filepath = fd.askopenfilename()
+            filename =os.path.splitext(os.path.basename(filepath))[0]
         device = VisaDevice(self.rm, filename)
+        if filename != None:
+            messagebox.askyesnocancel("Configurations Needed", 
+                                   "This device needs configuration options. Upload a file or manually generate device configurations.", 
+                                   options=(""))
         device.new_configurations(filepath)
         frame = ConfigFrame(self.configFrame, text=device.name + " Configurations", relief='sunken')
         self.devices[device.name] = frame
