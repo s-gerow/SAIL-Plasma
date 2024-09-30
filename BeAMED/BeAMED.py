@@ -68,3 +68,21 @@ class Experiment():
     
     def run_experiment(self, event = None):
         print("Running BeAMED Experiment")
+        print(self.rm.list_opened_resources())
+        #thread configures oscilliscope (thread 1)
+        #thread configures dmm (thread 2)
+        #thread configures power (thread 3)
+        #thread configures DAQ connection (thread 4)
+        #all previous threads should be done at this point
+        #thread starts recording pressure (thread 5)
+        #automated feedthrough grounds the nodes and sets to value (wait until done)
+        #notification to start pumping to vacuum (10sec)
+        #thread monitors pressure to turn on MFC (thread 6)
+        #thread stops mfc at target pressure. 
+        #thread starts reading DMM (thread 7)
+        #thread monitors oscilliscope for trigger (thread 8)
+        #thread increases voltage at set rate (thread 9)
+        
+        #thread 8 catches trigger and queries osc to  run/stop and for waveform
+        #thread 8 sends message to stop all other threads and retreive last measured values
+        #all threads stop action and send values to excel sheet

@@ -3,6 +3,7 @@ import sys
 import subprocess
 import importlib.metadata
 import tkinter as tk
+from tkinter.dialog import Dialog
 from tkinter import ttk
 from tkinter import filedialog as fd
 from tkinter import messagebox
@@ -120,17 +121,26 @@ class ChamberApp(tk.Tk):
         self.config(menu=self.menubar)
 
     def generate_configuration_frame(self, filename=None):
-        if filename == None:
+        if filename != None:
+            dialogPopup = Dialog(None, {'title': 'Need Configurations',
+                                        'text':
+                                        'To connect this device you must import its configurations.\n Do you want to craete configurations manually or import a file.',
+                                        'bitmap': 'questhead',
+                                        'default': 0,
+                                        'strings': ('Cancel', 'Create Configs', 'Import Configs')})
+            if dialogPopup.num == 0: return
+            elif dialogPopup.num == 1: 
+                print("Create Configs Later")
+                return
+            elif dialogPopup.num == 2:
+                filepath = fd.askopenfilename()
+        elif filename == None:
             filepath = fd.askopenfilename()
             filename =os.path.splitext(os.path.basename(filepath))[0]
         device = VisaDevice(self.rm, filename)
-        if filename != None:
-            messagebox.askyesnocancel("Configurations Needed", 
-                                   "This device needs configuration options. Upload a file or manually generate device configurations.", 
-                                   options=(""))
         device.new_configurations(filepath)
         frame = ConfigFrame(self.configFrame, text=device.name + " Configurations", relief='sunken')
-        self.devices[device.name] = frame
+        self.devices[device.name] = device
         frame.pack(side="left")
         for i,item in enumerate(device.options):
             var = tk.StringVar()
@@ -139,6 +149,10 @@ class ChamberApp(tk.Tk):
             frame.setConfigLocation(item, var)
             frame.setConfigValue(item, device.options[item][0])
         self.menubar.updateFrames(device.name)
+
+    def configure_device(self, device_name):
+        self.devices[device_name].configure()
+
     
 
 #Tkinter Menu for this particualr app
@@ -170,7 +184,7 @@ class ExperimentMenu(tk.Menu):
 
     def updateFrames(self, string):
         self.removeListMenu.add_command(label = string)
-        self.configureListMenu.add_command(label = string)
+        self.configureListMenu.add_command(label = string, command = lambda: self.master.configure_device(string))
     
     def open_experiment(self):
         

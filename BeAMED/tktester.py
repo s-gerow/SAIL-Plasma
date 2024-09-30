@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter.dialog import Dialog
 from tkinter import ttk
 from tkinter import filedialog as fd
 import csv
@@ -103,10 +104,25 @@ class App(tk.Tk):
     def build_experiment(self):
         print("built")
 
-if __name__ == "__main__":
-    app = App()
-    #print(os.listdir())
-    #app.create_config_frame(r"C:\Users\gerows\Python\SAIL-Plasma\BeAMED\example_config.txt")
-    #frame = app.get_config_frame("example_config")
-    #print(frame.get_configs())
-    app.mainloop()
+
+
+def test():
+    d = Dialog(None, {'title': 'File Modified',
+                      'text':
+                      'File "Python.h" has been modified'
+                      ' since the last time it was saved.'
+                      ' Do you want to save it before'
+                      ' exiting the application.',
+                      'bitmap': 'questhead',
+                      'default': 0,
+                      'strings': ('Save File',
+                                  'Discard Changes',
+                                  'Return to Editor')})
+    print(d.num)
+
+        
+
+root = tk.Tk()
+tk.Button(root, text='Test', command=test).pack()
+root.mainloop()
+
