@@ -62,14 +62,9 @@ class VisaDevice(pyvisa.resources.Resource):
                 self.options.__setitem__(config_name,[default_value,pyvisa_command]) 
 
 class DAQDevice():
-    def __init__(self, output_type: str):
+    def __init__(self, name):
         self.task = nidaqmx.Task()
-
-    def read():
-        print("read")
-
-    def write():
-        print("write")
+        self.name = name
 
 #Tkinter Config Window
 
@@ -78,6 +73,7 @@ class ConfigFrame(tk.LabelFrame):
     def __init__(self, parent, text, relief):
         super().__init__(parent, text=text, relief=relief)
         self.configs = {}
+
     
     def setConfigLocation(self, config_name, container: tk.StringVar):
         self.configs[config_name] = container
@@ -137,21 +133,32 @@ class ChamberApp(tk.Tk):
         elif filename == None:
             filepath = fd.askopenfilename()
             filename =os.path.splitext(os.path.basename(filepath))[0]
-        device = VisaDevice(self.rm, filename)
-        device.new_configurations(filepath)
-        frame = ConfigFrame(self.configFrame, text=device.name + " Configurations", relief='sunken')
-        self.devices[device.name] = device
-        frame.pack(side="left")
-        for i,item in enumerate(device.options):
-            var = tk.StringVar()
-            tk.Label(frame, text=item).grid(row=i, column=0)
-            tk.Spinbox(frame, textvariable=var).grid(row=i, column=1)
-            frame.setConfigLocation(item, var)
-            frame.setConfigValue(item, device.options[item][0])
-        self.menubar.updateFrames(device.name)
+        if filename in self.get_device_names():
+            print("device already created")
+            return
+        else:
+            device = VisaDevice(self.rm, filename)
+            device.new_configurations(filepath)
+            frame = ConfigFrame(self.configFrame, text=device.name + " Configurations", relief='sunken')
+            self.devices[device.name] = (device, frame)
+            frame.pack(side="left")
+            for i,item in enumerate(device.options):
+                var = tk.StringVar()
+                tk.Label(frame, text=item).grid(row=i, column=0)
+                tk.Spinbox(frame, textvariable=var).grid(row=i, column=1)
+                frame.setConfigLocation(item, var)
+                frame.setConfigValue(item, device.options[item][0])
+            self.menubar.updateFrames(device.name)
 
     def configure_device(self, device_name):
-        self.devices[device_name].configure()
+        self.devices[device_name][0].configure()
+
+    def get_device_names(self):
+        names = []
+        for i in self.devices:
+            names.append(i)
+        return names
+
 
     
 
@@ -200,6 +207,8 @@ class ExperimentMenu(tk.Menu):
                 messagebox.showwarning("Invalid File", "Please select a valid Python (.py) file.")
 
     def load_experiment(self, filepath):
+        for widget in self.master.experimentFrame.winfo_children():
+            widget.destroy()
         module_name = os.path.splitext(os.path.basename(filepath))[0]
         spec = importlib.util.spec_from_file_location(module_name, filepath)
         module = importlib.util.module_from_spec(spec)
