@@ -20,7 +20,8 @@ class Experiment():
 
         #_________________Input Device Frame________________________________________#
         device_opt_frame = tk.Frame(IOFrame)
-        device_opt_frame.pack(side="left")
+        device_opt_frame.grid(row=0, column=0)
+
         tk.Label(device_opt_frame, text = 'VISA Power').grid(row=0, column=0)
         self.pwr_cbox = ttk.Combobox(device_opt_frame, state = 'readonly', values = self.check_IO())
         self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(event, self.pwr_cbox))
@@ -38,17 +39,18 @@ class Experiment():
 
         #_________________Frame for CheckBox Settings at Experiment Startup_________#
         enabledisable_frame = tk.Frame(IOFrame)
-        enabledisable_frame.pack(side="left")
+        enabledisable_frame.grid(row=0,column=1)
+
         #Button appearance
         self.true_image = tk.PhotoImage(width=15, height=15)
         self.false_image = tk.PhotoImage(width=15, height = 15)
         self.true_image.put(("lime"), to=(0,0,14,14))
         self.false_image.put(("green"), to=(0,0,14,14))
 
-        trig_true_image = tk.PhotoImage(width=50, height=50)
-        trig_false_image = tk.PhotoImage(width=50, height=50)
-        trig_true_image.put(("lime"), to=(0,0,49,49))
-        trig_false_image.put(("green"), to=(0,0,49,49))
+        self.trig_true_image = tk.PhotoImage(width=50, height=50)
+        self.trig_false_image = tk.PhotoImage(width=50, height=50)
+        self.trig_true_image.put(("lime"), to=(0,0,49,49))
+        self.trig_false_image.put(("green"), to=(0,0,49,49))
 
         cont_osc_var = tk.StringVar()
         tk.Label(enabledisable_frame, text='Enable Continuous Acquisition O-Scope (T: Enable)').grid(row=0 )
@@ -109,7 +111,7 @@ class Experiment():
         
         #_________________Frame for Experiment Condition Settings___________________#
         experimentCondysFrame = tk.Frame(IOFrame)
-        experimentCondysFrame.pack(side = "left")
+        experimentCondysFrame.grid(row=0, column=2)
 
         init_v_var = tk.StringVar()
         tk.Label(experimentCondysFrame,
@@ -131,42 +133,109 @@ class Experiment():
                     ).grid(row=4)
 
         #Position of the plates
-        position_title = tk.Label(experimentCondysFrame,
-                                text = "Position Set-Up",
-                                font = ('Times New Roman', 14, 'bold')
-                                ).grid(row=5)
-        plate_pos_label = tk.Label(IO_Frame,
-                                text = "Plate Position",
-                                font = label_font
-                                ).place(x=550, y=275)
-        electrode_pos_label = tk.Label(IO_Frame,
-                                    text = "Electrode Position",
-                                    font = label_font
-                                    ).place(x=550,y=325)
+        tk.Label(experimentCondysFrame,
+                text = "Position Set-Up",
+                font = ('Times New Roman', 14, 'bold')
+                ).grid(row=5)
         plate_pos_var = tk.StringVar()
+        ttk.Spinbox(experimentCondysFrame,
+                    from_=-10,
+                    to=10,
+                    textvariable=plate_pos_var
+                    ).grid(row=6)
+        tk.Label(experimentCondysFrame,
+                                text = "Plate Position").grid(row=7)
+        tk.Label(experimentCondysFrame,
+                text = "Electrode Position").grid(row=8)
         electrode_pos_var = tk.StringVar()
-        plate_spinbox = ttk.Spinbox(IO_Frame,
-                                    from_=-10,
-                                    to=10,
-                                    textvariable=plate_pos_var
-                                    ).place(x=552,y=300,width=125)
-        electrode_spinbox = ttk.Spinbox(IO_Frame,
-                                        from_=-10,
-                                        to=10,
-                                        textvariable=electrode_pos_var
-                                        ).place(x=552,y=350,width=125)
+        ttk.Spinbox(experimentCondysFrame,
+                    from_=-10,
+                    to=10,
+                    textvariable=electrode_pos_var
+                    ).grid(row=9)
 
             #Target Pressure
         init_pressure = tk.StringVar()
-        pressure_title = tk.Label(IO_Frame,
-                                text = "Target Pressure",
-                                font = ('Times New Roman', 14, 'bold')
-                                ).place(x=550,y=400)
-        pressure_spinbox = tk.Spinbox(IO_Frame,
-                                    from_=0,
-                                    to = 800,
-                                    textvariable=init_pressure
-                                    ).place(x=552, y=425, width=125)
+        tk.Label(experimentCondysFrame,
+                    text = "Target Pressure",
+                    font = ('Times New Roman', 14, 'bold')
+                    ).grid(row=10)
+        tk.Spinbox(experimentCondysFrame,
+                    from_=0,
+                    to = 800,
+                    textvariable=init_pressure
+                    ).grid(row=11)
+    
+        #_________________Frame for Experiment Control_______________________________#
+        experimentControlFrame = tk.Frame(DisplayFrame)
+        experimentControlFrame.grid(row=1, column=0)
+
+        #Start/Stop Buttons
+        ttk.Button(experimentControlFrame, text = 'START', command=self.run_experiment).grid(row=0)
+        ttk.Button(experimentControlFrame, text = 'STOP',command=None).grid(row=1)
+
+        triggered_var = tk.IntVar()
+        tk.Label(experimentControlFrame,
+                    text = "Triggered\nEvent").grid(row=3)
+        tk.Checkbutton(experimentControlFrame, 
+                        text = "Event Triggered?", 
+                        image = self.trig_false_image, 
+                        selectimage = self.trig_true_image, 
+                        indicatoron = False, 
+                        onvalue = 1, 
+                        offvalue = 0, 
+                        variable = triggered_var).grid(row=4)
+
+        
+        #_________________Frame for Experiment Output Graph_________________________#
+        experimentGraphFrame = tk.Frame(DisplayFrame)
+        experimentGraphFrame.grid(row=0, columnspan=2)
+
+        figure = Figure(dpi=75)
+        figure_canvas = FigureCanvasTkAgg(figure, experimentGraphFrame)
+        NavigationToolbar2Tk(figure_canvas,experimentGraphFrame).pack(side='top')
+        axes = figure.add_subplot()
+        axes.set_title('Discharge Plot')
+        axes.set_ylabel('Voltage')
+        axes.set_xlabel('Time')
+        figure_canvas.get_tk_widget().pack(side='top')
+
+        #_________________Frame for Experiment Output Graph_________________________#
+        experimentOutputFrame = tk.Frame(DisplayFrame)
+        experimentOutputFrame.grid(row=1, column=1)
+
+        tk.Label(experimentOutputFrame,
+                            text = "Power Supply Voltage").grid(row = 0, column=0)
+        tk.Label(experimentOutputFrame,
+                             text = "Power Supply Current").grid(row=1, column = 0)
+        tk.Label(experimentOutputFrame,
+                        text = "Voltage Output").grid(row=2, column=0)
+        tk.Label(experimentOutputFrame,
+                        text = "Pressure (Torr)").grid(row=3, column=0)
+        PS_voltage_var = tk.IntVar()
+        tk.Spinbox(experimentOutputFrame,
+                        from_=0,
+                        to = 800,
+                        textvariable=PS_voltage_var
+                        ).grid(row=0, column=1)
+        PS_current_var = tk.IntVar()
+        tk.Spinbox(experimentOutputFrame,
+                        from_=0,
+                        to = 800,
+                        textvariable=PS_current_var
+                        ).grid(row=1, column=1)
+        voltage_out_var = tk.IntVar()
+        tk.Spinbox(experimentOutputFrame,
+                        from_=0,
+                        to = 800,
+                        textvariable=voltage_out_var
+                        ).grid(row=2, column=1)
+        pressure_var = tk.IntVar()
+        tk.Spinbox(experimentOutputFrame,
+                        from_=0,
+                        to = 800,
+                        textvariable=pressure_var
+                        ).grid(row=3, column=1)
 
     def toggle_check_btn(btn, var):
         if var.get() == "Enable":
@@ -209,6 +278,8 @@ class Experiment():
     def run_experiment(self, event = None):
         print("Running BeAMED Experiment")
         print(self.rm.list_opened_resources())
+        self.configureOscilloscope()
+        Thread(target = lambda: self.configureOscilloscope())
         #thread configures oscilliscope (thread 1)
         #thread configures dmm (thread 2)
         #thread configures power (thread 3)
@@ -226,3 +297,20 @@ class Experiment():
         #thread 8 catches trigger and queries osc to  run/stop and for waveform
         #thread 8 sends message to stop all other threads and retreive last measured values
         #all threads stop action and send values to excel sheet
+        
+    def configureOscilloscope(self):
+        oscName = self.osc_cbox.get()
+        osc = self.parent.devices[oscName][0]
+        osc.open_device()
+        print(osc.rm.list_opened_resources())
+        osc.close_device()
+        print(osc.rm.list_opened_resources())
+
+
+if __name__ == "__main__":
+    chamber = ChamberApp()
+    chamber.menubar.load_experiment("./BeAMED/BeAMED.py")
+    for config in ["Oscilloscope.config", "DMM.config", "PWR.config"]:
+        file = "./BeAMED/" + config
+        chamber.generate_configuration_frame(filepath = file)
+    chamber.mainloop()

@@ -45,11 +45,15 @@ class VisaDevice(pyvisa.resources.Resource):
         super().__init__(rm, name)
         self.name = name
         self.options = {}
+        self.resource = None
     
     def configure(self):
         print("configured")
         for config, value in self.options.items():
             print(f"config: {config} | value: {value[0]} | pyvisa command: {value[1]}")
+
+    def setConfiguration(self, config_name, value):
+        self.options[config_name][0] = value
 
     def new_configurations(self, config_file: str):
         with open(config_file, 'r') as f:
@@ -59,7 +63,18 @@ class VisaDevice(pyvisa.resources.Resource):
                 config_name = row[0]
                 default_value = row[1]
                 pyvisa_command = row[2]
-                self.options.__setitem__(config_name,[default_value,pyvisa_command]) 
+                self.options.__setitem__(config_name,[default_value,pyvisa_command])
+
+    def open_device(self):
+        rm = self.rm
+        device_list = rm.list_resources()
+        try:
+            self.resource = rm.open_resource(self.name)
+        except pyvisa.errors.VisaIOError:
+            print(f"Unable to connect to resource, device name not found in connected device list: {device_list}")
+        
+    def close_device(self):
+        self.resource.close()
 
 class DAQDevice():
     def __init__(self, name):
@@ -70,10 +85,17 @@ class DAQDevice():
 
 #tkinter config frame
 class ConfigFrame(tk.LabelFrame):
-    def __init__(self, parent, text, relief):
+    def __init__(self, parent, name, relief, device):
+        text = name + " Configurations"
         super().__init__(parent, text=text, relief=relief)
         self.configs = {}
+        self.name = name
+        self.device = device
 
+    def configureAll(self):
+        for config, location in self.configs.items():
+            print(f"setting {config} to {location.get()}")
+            self.device.setConfiguration(config, location.get())
     
     def setConfigLocation(self, config_name, container: tk.StringVar):
         self.configs[config_name] = container
@@ -116,8 +138,8 @@ class ChamberApp(tk.Tk):
         self.menubar.deviceMenu.add_command(label="New Device", command=self.generate_configuration_frame)
         self.config(menu=self.menubar)
 
-    def generate_configuration_frame(self, filename=None):
-        if filename != None:
+    def generate_configuration_frame(self, filename=None, filepath = None):
+        if (filename != None) & (filepath == None):
             dialogPopup = Dialog(None, {'title': 'Need Configurations',
                                         'text':
                                         'To connect this device you must import its configurations.\n Do you want to craete configurations manually or import a file.',
@@ -130,16 +152,19 @@ class ChamberApp(tk.Tk):
                 return
             elif dialogPopup.num == 2:
                 filepath = fd.askopenfilename()
-        elif filename == None:
+        elif (filename == None) & (filepath == None):
             filepath = fd.askopenfilename()
-            filename =os.path.splitext(os.path.basename(filepath))[0]
+            filename = os.path.splitext(os.path.basename(filepath))[0]
+        elif (filepath != None) & (filename == None):
+            filename = os.path.splitext(os.path.basename(filepath))[0]
+        
         if filename in self.get_device_names():
             print("device already created")
             return
         else:
             device = VisaDevice(self.rm, filename)
             device.new_configurations(filepath)
-            frame = ConfigFrame(self.configFrame, text=device.name + " Configurations", relief='sunken')
+            frame = ConfigFrame(self.configFrame, name=device.name , relief='sunken', device = device)
             self.devices[device.name] = (device, frame)
             frame.pack(side="left")
             for i,item in enumerate(device.options):
@@ -151,6 +176,7 @@ class ChamberApp(tk.Tk):
             self.menubar.updateFrames(device.name)
 
     def configure_device(self, device_name):
+        self.devices[device_name][1].configureAll()
         self.devices[device_name][0].configure()
 
     def get_device_names(self):
