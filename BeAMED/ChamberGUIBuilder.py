@@ -8,7 +8,7 @@ from tkinter import ttk
 from tkinter import filedialog as fd
 from tkinter import messagebox
 import time
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 import logging
 import os
 import csv
@@ -46,6 +46,7 @@ class VisaDevice(pyvisa.resources.Resource):
         self.name = name
         self.options = {}
         self.resource = None
+        self.rm = rm
     
     def configure(self):
         print("configured")
@@ -140,6 +141,8 @@ class ChamberApp(tk.Tk):
 
     def generate_configuration_frame(self, filename=None, filepath = None):
         if (filename != None) & (filepath == None):
+            if filename in self.devices:
+                return
             dialogPopup = Dialog(None, {'title': 'Need Configurations',
                                         'text':
                                         'To connect this device you must import its configurations.\n Do you want to craete configurations manually or import a file.',

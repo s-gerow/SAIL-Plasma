@@ -3,6 +3,7 @@ from ChamberGUIBuilder import *
 class Experiment():
     def __init__(self, parent: ChamberApp):
 
+        parent.protocol('WM_DELETE_WINDOW', lambda: self.clean_exit()) 
         #_________________Attributes of Experiment__________________________________#
         self.parent = parent
         self.logger = logging.getLogger('BeAMED')
@@ -211,6 +212,7 @@ class Experiment():
                         indicatoron = False, 
                         onvalue = 1, 
                         offvalue = 0, 
+                        command = lambda: self.test_trigger_experiment(),
                         variable = self.triggered_var).grid(row=4)
 
         
@@ -264,6 +266,21 @@ class Experiment():
                         textvariable=self.pressure_var
                         ).grid(row=3, column=1)
 
+    def clean_exit(self):
+        level = "INFO"
+        thread = "MAIN"
+        if
+        self.Dmm.close_device()
+        self.Osc.close_device()
+        self.Pwr.close_device()
+        self.parent.destroy()
+
+    def check_device_attributes(self):
+        match (self.Dmm, self.Osc, self.Pwr):
+            case (None, VisaDevice, VisaDevice):
+                return 
+        return boolean
+
     def toggle_check_btn(btn, var):
         if var.get() == "Enable":
             btn.configure(text='T: Enable')
@@ -302,19 +319,39 @@ class Experiment():
         else:
             self.parent.generate_configuration_frame(filename= cbox_name.get())
     
+    def test_trigger_experiment(self):
+        if self.triggered_var.get() == 1:
+            self.isDischargeTriggered.set()
+        else:
+            self.isDischargeTriggered.clear()
+
     def run_experiment(self, event = None):
+        resource_lock = Lock()
         print("Running BeAMED Experiment")
         print(self.rm.list_opened_resources())
         #thread configures oscilliscope (thread 1)
-        Thread(target = lambda: self.configureOscilloscope())
+        oscName = self.osc_cbox.get()
+        dmmName = self.dmm_cbox.get()
+        pwrName = self.pwr_cbox.get()
+        osccfg = Thread(target = lambda: self.configureOscilloscope(resource_lock, oscName))
+        dmmcfg = Thread(target = lambda: self.configureDMM(resource_lock, dmmName))
+        pwrcfg = Thread(target = lambda: self.configurePower(resource_lock,pwrName))
+        configurationThreads = [ osccfg, dmmcfg, pwrcfg]
+        for thread in configurationThreads:
+            print(f"starting {thread} thread")
+            thread.start()
+        
+        for thread in configurationThreads:
+            thread.join()
+        print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
         #thread configures dmm (thread 2)
-        Thread(target = lambda: self.configureDMM())
         #thread configures power (thread 3)
-        Thread(target = lambda: self.configurePower())
         #all previous threads should be done at this point
-        self.manageConfigure()
         #thread starts recording pressure (thread 5)
-        Thread(target = lambda: self.read_pressure())
+        live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
+        live_pressure.start()
+        live_dmm = Thread(target = lambda: self.readDmm(), daemon=True)
+        live_dmm.start()
         #automated feedthrough grounds the nodes and sets to value (wait until done)
         #notification to start pumping to vacuum (10sec)
         #thread monitors pressure to turn on MFC (thread 6)
@@ -326,45 +363,47 @@ class Experiment():
         #thread 8 catches trigger and queries osc to  run/stop and for waveform
         #thread 8 sends message to stop all other threads and retreive last measured values
         #all threads stop action and send values to excel sheet
-        
-    def configureOscilloscope(self):
-        oscName = self.osc_cbox.get()
-        self.Osc = self.parent.devices[oscName][0]
-        self.Osc.open_device()
-        print(self.Osc.rm.list_opened_resources())
-        self.Osc.close_device()
-        print(self.Osc.rm.list_opened_resources())
+    
+
+    def configureOscilloscope(self, lock, oscName):
+        print("getting lock")
+        with lock:
+            print(f"configuring{oscName}")
+            self.Osc = self.parent.devices[oscName][0]
+            self.Osc.open_device()
+            print(self.Osc.rm.list_opened_resources())
+            self.Osc.close_device()
+            print(self.Osc.rm.list_opened_resources())
         self.isOscConfigured.set()
 
-    def configureDMM(self):
-        dmmName = self.dmm_cbox.get()
-        self.Dmm = self.parent.devices[dmmName][0]
-        self.Dmm.open_device()
-        print(self.Dmm.rm.list_opened_resources())
-        self.Dmm.close_device()
-        print(self.Dmm.rm.list_opened_resources())
+    def configureDMM(self, lock, dmmName):
+        with lock:
+            
+            print(f"configuring{dmmName}")
+            self.Dmm = self.parent.devices[dmmName][0]
+            self.Dmm.open_device()
+            print(self.Dmm.rm.list_opened_resources())
+            #self.Dmm.close_device()
+            print(self.Dmm.rm.list_opened_resources())
         self.isDmmConfigured.set()
 
-    def configurePower(self):
-        pwrName = self.pwr_cbox.get()
-        self.Pwr = self.parent.devices[pwrName][0]
-        self.Pwr.open_device()
-        print(self.Pwr.rm.list_opened_resources())
-        self.Pwr.close_device()
-        print(self.Pwr.rm.list_opened_resources())
+    def configurePower(self, lock, pwrName):
+        with lock:
+            
+            print(f"configuring{pwrName}")
+            self.Pwr = self.parent.devices[pwrName][0]
+            self.Pwr.open_device()
+            print(self.Pwr.rm.list_opened_resources())
+            self.Pwr.close_device()
+            print(self.Pwr.rm.list_opened_resources())
         self.isPowerConfigured.set()
-
-    def manageConfigure(self):
-        while(self.isOscConfigured.is_set() == False & self.isDmmConfigured.is_set() == False & self.isPowerConfigured.is_set() == False):
-            print("waiting for all visa devices to be configured")
-            time.sleep(1)
 
     def read_pressure(self):
         pressureSensor = DAQDevice("Pressure")
         pressureSensor.task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
         pressureSensor.task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
         self.isPressureReading.set()
-        while True:
+        while self.isExperimentStarted.is_set():
                 pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
                 unfiltered_avg = np.median(pressure_sensor_voltage)
                 true_pressure = 10**(unfiltered_avg - 5)
@@ -374,11 +413,12 @@ class Experiment():
                     return
 
     def readDmm(self):
-        while(self.isExperimentStarted & self.isDischargeTriggered == False):
+        while(self.isExperimentStarted.is_set() & self.isDischargeTriggered.is_set() == False):
             voltage = self.Dmm.resource.query(':READ?')
             self.parent.after(1, lambda: self.voltage_out_var.set(voltage))
         if(self.isDischargeTriggered.is_set()):
             self.isDischargeTriggered.dmm_voltage = voltage
+            return
     
 
 
@@ -386,7 +426,7 @@ class Experiment():
 if __name__ == "__main__":
     chamber = ChamberApp()
     chamber.menubar.load_experiment("./BeAMED/BeAMED.py")
-    for config in ["Oscilloscope.config", "DMM.config", "PWR.config"]:
+    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
         file = "./BeAMED/" + config
         chamber.generate_configuration_frame(filepath = file)
     chamber.mainloop()
