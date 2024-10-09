@@ -82,7 +82,7 @@ class Experiment():
 
         self.cont_osc_var = tk.StringVar()
         tk.Label(enabledisable_frame, text='Enable Continuous Acquisition O-Scope (T: Enable)').grid(row=0 )
-        tk.Checkbutton(enabledisable_frame, 
+        self.cont_button = tk.Checkbutton(enabledisable_frame, 
                                 text = 'T: Enable',
                                 variable=self.cont_osc_var,
                                 image = self.false_image, 
@@ -90,11 +90,13 @@ class Experiment():
                                 indicatoron = False, 
                                 compound= 'left',
                                 onvalue="Enable",
-                                offvalue="Disable").grid(row=1 )
+                                offvalue="Disable",
+                                command = lambda: self.toggle_check_btn(self.cont_button, self.cont_osc_var))
+        self.cont_button.grid(row=1 )
 
         self.auto_range_var = tk.StringVar()
         tk.Label(enabledisable_frame, text = 'Auto Range DMM (T: Enable)').grid(row=2 )
-        tk.Checkbutton(enabledisable_frame, 
+        self.auto_button = tk.Checkbutton(enabledisable_frame, 
                                     text = 'T: Enable',
                                     variable=self.auto_range_var,
                                     image = self.false_image, 
@@ -102,11 +104,13 @@ class Experiment():
                                     indicatoron = False, 
                                     compound= 'left',
                                     onvalue="Enable",
-                                    offvalue="Disable").grid(row=3 )
+                                    offvalue="Disable",
+                                    command = lambda: self.toggle_check_btn(self.auto_button, self.auto_range_var))
+        self.auto_button.grid(row=3 )
 
         self.v_out_var = tk.StringVar()
         tk.Label(enabledisable_frame, text = 'Enable V-Output Power (T: Enable)').grid(row=4 )
-        tk.Checkbutton(enabledisable_frame, 
+        self.vout_button = tk.Checkbutton(enabledisable_frame, 
                                 text = 'T:Enable',
                                 image = self.false_image, 
                                 selectimage = self.true_image, 
@@ -114,7 +118,10 @@ class Experiment():
                                 compound= 'left',
                                 variable = self.v_out_var,
                                 onvalue="Enable",
-                                offvalue="Disable").grid(row=5 )
+                                offvalue="Disable",
+                                command = lambda: self.toggle_check_btn(self.vout_button, self.v_out_var))
+        self.vout_button.grid(row=5 )
+
         tk.Label(enabledisable_frame, text = 'Power Supply Output Mode', font = ('Times New Roman', 14, 'bold')).grid(row=6 )
         self.cv_var = tk.IntVar()
         tk.Checkbutton(enabledisable_frame, 
@@ -170,9 +177,9 @@ class Experiment():
                     from_=-10,
                     to=10,
                     textvariable=self.plate_pos_var
-                    ).grid(row=6)
+                    ).grid(row=7)
         tk.Label(experimentCondysFrame,
-                                text = "Plate Position").grid(row=7)
+                                text = "Plate Position").grid(row=6)
         tk.Label(experimentCondysFrame,
                 text = "Electrode Position").grid(row=8)
         self.electrode_pos_var = tk.StringVar()
@@ -269,19 +276,15 @@ class Experiment():
     def clean_exit(self):
         level = "INFO"
         thread = "MAIN"
-        if
-        self.Dmm.close_device()
-        self.Osc.close_device()
-        self.Pwr.close_device()
+        self.log_message(thread, level, f"Quitting Application. Cleaning up loose threads.")
+        for i in [self.Dmm, self.Osc, self.Pwr]:
+            if isinstance(i, VisaDevice):
+                self.log_message(thread, level, f"Closing {i.name}")
+                i.close_device()
         self.parent.destroy()
 
-    def check_device_attributes(self):
-        match (self.Dmm, self.Osc, self.Pwr):
-            case (None, VisaDevice, VisaDevice):
-                return 
-        return boolean
 
-    def toggle_check_btn(btn, var):
+    def toggle_check_btn(self, btn, var):
         if var.get() == "Enable":
             btn.configure(text='T: Enable')
         elif var.get() == "Disable":
@@ -322,12 +325,15 @@ class Experiment():
     def test_trigger_experiment(self):
         if self.triggered_var.get() == 1:
             self.isDischargeTriggered.set()
+            print(self.isDischargeTriggered.is_set())
         else:
             self.isDischargeTriggered.clear()
+            print(self.isDischargeTriggered.is_set())
 
     def run_experiment(self, event = None):
         resource_lock = Lock()
         print("Running BeAMED Experiment")
+        self.isExperimentStarted.set()
         print(self.rm.list_opened_resources())
         #thread configures oscilliscope (thread 1)
         oscName = self.osc_cbox.get()
@@ -350,16 +356,19 @@ class Experiment():
         #thread starts recording pressure (thread 5)
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
-        live_dmm = Thread(target = lambda: self.readDmm(), daemon=True)
-        live_dmm.start()
         #automated feedthrough grounds the nodes and sets to value (wait until done)
         #notification to start pumping to vacuum (10sec)
         #thread monitors pressure to turn on MFC (thread 6)
         #thread stops mfc at target pressure. 
         #thread starts reading DMM (thread 7)
+        live_dmm = Thread(target = lambda: self.readDmm(), daemon=True)
+        live_dmm.start()
         #thread monitors oscilliscope for trigger (thread 8)
         #thread increases voltage at set rate (thread 9)
-        
+        init_v = int(self.init_v_var.get())
+        init_c = int(self.init_current_var.get())
+        v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
+        v_increase.start()
         #thread 8 catches trigger and queries osc to  run/stop and for waveform
         #thread 8 sends message to stop all other threads and retreive last measured values
         #all threads stop action and send values to excel sheet
@@ -371,6 +380,10 @@ class Experiment():
             print(f"configuring{oscName}")
             self.Osc = self.parent.devices[oscName][0]
             self.Osc.open_device()
+            if self.Osc.options['Reset'][0] == "True":
+                self.Osc.resource.write("*RST")
+            #self.Osc.resource.write("")
+            
             print(self.Osc.rm.list_opened_resources())
             self.Osc.close_device()
             print(self.Osc.rm.list_opened_resources())
@@ -378,12 +391,11 @@ class Experiment():
 
     def configureDMM(self, lock, dmmName):
         with lock:
-            
             print(f"configuring{dmmName}")
             self.Dmm = self.parent.devices[dmmName][0]
             self.Dmm.open_device()
             print(self.Dmm.rm.list_opened_resources())
-            #self.Dmm.close_device()
+            self.Dmm.close_device()
             print(self.Dmm.rm.list_opened_resources())
         self.isDmmConfigured.set()
 
@@ -413,12 +425,30 @@ class Experiment():
                     return
 
     def readDmm(self):
+        self.Dmm.open_device()
         while(self.isExperimentStarted.is_set() & self.isDischargeTriggered.is_set() == False):
             voltage = self.Dmm.resource.query(':READ?')
             self.parent.after(1, lambda: self.voltage_out_var.set(voltage))
         if(self.isDischargeTriggered.is_set()):
             self.isDischargeTriggered.dmm_voltage = voltage
             return
+        
+    def increase_voltage(self, init_v: int, init_c: int):
+        self.Pwr.open_device()
+        self.Pwr.resource.write("OUTP:STAT:IMM ON")
+        voltage_step = int(self.Pwr.options["Voltage Step Size"][0])
+        self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
+        while self.isDischargeTriggered.is_set() == False:
+            self.Pwr.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
+            self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
+            if(self.isDischargeTriggered.is_set()):
+                self.parent.after(1, self.PS_voltage_var.set(self.Pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
+            init_v += voltage_step
+        self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
+        self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
+        self.Pwr.resource.write("OUTP:STAT:IMM OFF")
+        
+
     
 
 

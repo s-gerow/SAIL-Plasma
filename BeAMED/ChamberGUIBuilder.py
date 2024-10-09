@@ -51,7 +51,7 @@ class VisaDevice(pyvisa.resources.Resource):
     def configure(self):
         print("configured")
         for config, value in self.options.items():
-            print(f"config: {config} | value: {value[0]} | pyvisa command: {value[1]}")
+            print(f"config: {config} | value: {value[0]} | range: {value[1]}")
 
     def setConfiguration(self, config_name, value):
         self.options[config_name][0] = value
@@ -63,8 +63,8 @@ class VisaDevice(pyvisa.resources.Resource):
                     continue
                 config_name = row[0]
                 default_value = row[1]
-                pyvisa_command = row[2]
-                self.options.__setitem__(config_name,[default_value,pyvisa_command])
+                range = row[2]
+                self.options.__setitem__(config_name,[default_value,range])
 
     def open_device(self):
         rm = self.rm
@@ -165,19 +165,88 @@ class ChamberApp(tk.Tk):
             print("device already created")
             return
         else:
-            device = VisaDevice(self.rm, filename)
-            device.new_configurations(filepath)
-            frame = ConfigFrame(self.configFrame, name=device.name , relief='sunken', device = device)
-            self.devices[device.name] = (device, frame)
-            frame.pack(side="left")
-            for i,item in enumerate(device.options):
-                var = tk.StringVar()
-                tk.Label(frame, text=item).grid(row=i, column=0)
-                tk.Spinbox(frame, textvariable=var).grid(row=i, column=1)
-                frame.setConfigLocation(item, var)
-                frame.setConfigValue(item, device.options[item][0])
-            self.menubar.updateFrames(device.name)
+            try:
+                device = VisaDevice(self.rm, filename)
+                device.new_configurations(filepath)
+                frame = ConfigFrame(self.configFrame, name=device.name , relief='sunken', device = device)
+                self.devices[device.name] = (device, frame)
+                frame.pack(side="left")
+                for i,item in enumerate(device.options):
+                    returnarray = self.stringlisttolist(device.options[item][1])
+                    if len(returnarray) == 3:
+                        from_ = returnarray[0]
+                        to = returnarray[1]
+                        step = returnarray[2]
+                        values = None
+                    elif len(returnarray) == 1:
+                        values = returnarray[0]
+                        from_ = None
+                        to = None
+                        step = None
+                    var = tk.StringVar()
+                    tk.Label(frame, text=item).grid(row=i, column=0)
+                    tk.Spinbox(frame, from_ = from_, to = to, increment = step, values=values, textvariable=var).grid(row=i, column=1)
+                    frame.setConfigLocation(item, var)
+                    frame.setConfigValue(item, device.options[item][0])
+                self.menubar.updateFrames(device.name)
+            except TypeError as e:
+                messagebox.showerror(title= "Invalid Configurations", message= f"Could not create device due to invalid configuration file, please try again. {e}", icon= messagebox.ERROR)
 
+    def stringlisttolist(self,stringlist: str):
+        if stringlist[0] == "R":
+            newlist = stringlist[2:-1].split(',')
+            return [newlist]
+        else:
+            stringlist = stringlist.split(',')
+            from_, to, range = self.converttorange(stringlist)
+            return [from_, to, range]
+
+    def converttorange(self,listOfStrings: list[str,str] | list[str,str,str]):
+        match listOfStrings:
+            case ['oo', 'oo']:
+                from_ = -1000000
+                to = 1000000
+                step = 1
+                return from_, to, step
+            case ['oo', x]:
+                from_ = -1000000
+                to = int(x)
+                step = 1
+                return from_, to, step
+            case [x, 'oo']:
+                from_ = int(x)
+                to = 1000000
+                step = 1
+                return from_,to,step
+            case [x, y]:
+                from_ = int(x)
+                to = int(y)
+                step = 1
+                return from_, to, step
+            case ['oo', 'oo', step]:
+                from_ = -1000000
+                to = 1000000
+                step = step
+                return from_, to, step
+            case ['oo', x, step]:
+                from_ = -1000000
+                to = int(x)
+                step = step
+                return from_, to, step
+            case [x, 'oo', step]:
+                from_ = int(x)
+                to = 1000000
+                step = step
+                return from_,to,step
+            case [x, y, step]:
+                from_ = int(x)
+                to = int(y)
+                step = step
+                return from_, to, step
+            case _:
+                #print(listOfStrings)
+                raise TypeError
+            
     def configure_device(self, device_name):
         self.devices[device_name][1].configureAll()
         self.devices[device_name][0].configure()
