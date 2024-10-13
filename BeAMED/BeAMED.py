@@ -11,6 +11,9 @@ class Experiment():
         self.Dmm = None
         self.Osc = None
         self.Pwr = None
+        self.cont_acq = None
+        self.v_out = None
+        self.auto_range = None
 
         #_________________Experiment Events_________________________________________#
         self.isOscConfigured = Event()
@@ -331,22 +334,34 @@ class Experiment():
             print(self.isDischargeTriggered.is_set())
 
     def run_experiment(self, event = None):
+        thread = "MAIN"
+        level = "INFO"
+        if self.v_out_var.get() == "Disable":
+            messagebox.showerror("Experiment Initilization Error", "Voltage Output Diable.\nPlease enable voltage output then try again", icon=messagebox.ERROR)
+            return
         resource_lock = Lock()
-        print("Running BeAMED Experiment")
+        self.start_log()
         self.isExperimentStarted.set()
         print(self.rm.list_opened_resources())
         #thread configures oscilliscope (thread 1)
         oscName = self.osc_cbox.get()
         dmmName = self.dmm_cbox.get()
         pwrName = self.pwr_cbox.get()
+        if self.cont_osc_var.get() == "Enable":
+            self.cont_acq = "NORM"
+        else:
+            self.cont_acq = "AUTO"
+        if self.auto_range_var.get() == "Enable":
+            self.auto_range = "ON"
+        else:
+            self.auto_range = "OFF"
         osccfg = Thread(target = lambda: self.configureOscilloscope(resource_lock, oscName))
         dmmcfg = Thread(target = lambda: self.configureDMM(resource_lock, dmmName))
         pwrcfg = Thread(target = lambda: self.configurePower(resource_lock,pwrName))
         configurationThreads = [ osccfg, dmmcfg, pwrcfg]
         for thread in configurationThreads:
-            print(f"starting {thread} thread")
+            self.log_message(thread, level,f"starting {thread} thread")
             thread.start()
-        
         for thread in configurationThreads:
             thread.join()
         print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
@@ -354,6 +369,7 @@ class Experiment():
         #thread configures power (thread 3)
         #all previous threads should be done at this point
         #thread starts recording pressure (thread 5)
+        self.log_message(thread, level, "Starting Continuous Pressure Reading")
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
         #automated feedthrough grounds the nodes and sets to value (wait until done)
@@ -361,6 +377,7 @@ class Experiment():
         #thread monitors pressure to turn on MFC (thread 6)
         #thread stops mfc at target pressure. 
         #thread starts reading DMM (thread 7)
+        self.log_message(thread, level, "Starting Continuos Voltage Reading")
         live_dmm = Thread(target = lambda: self.readDmm(), daemon=True)
         live_dmm.start()
         #thread monitors oscilliscope for trigger (thread 8)
@@ -375,28 +392,46 @@ class Experiment():
     
 
     def configureOscilloscope(self, lock, oscName):
-        print("getting lock")
-        with lock:
-            print(f"configuring{oscName}")
-            self.Osc = self.parent.devices[oscName][0]
-            self.Osc.open_device()
-            if self.Osc.options['Reset'][0] == "True":
-                self.Osc.resource.write("*RST")
-            #self.Osc.resource.write("")
-            
-            print(self.Osc.rm.list_opened_resources())
-            self.Osc.close_device()
-            print(self.Osc.rm.list_opened_resources())
+        thread = "OSC-CFG"
+        level = "INFO"
+        self.log_message(thread, level, f"configuring{oscName}")
+        self.Osc = self.parent.devices[oscName][0]
+        self.Osc.open_device()
+        if self.Osc.options['Reset'][0] == "True":
+            self.Osc.resource.write("*RST")
+        self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:ATTN {self.Osc.options['Attenuation'][0]}")
+        self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:OFST {self.Osc.options['Offset'][0]}")
+        self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:VDIV {self.Osc.options['Voltage Division'][0]}")
+        self.Osc.resource.write(f"TDIV {self.Osc.options['Time Division'][0]}")
+        self.Osc.resource.write(f"HPOS {self.Osc.options['Horizontal Position'][0]}")
+        self.Osc.resource.write(f"TRMD {self.cont_acq}")
+        self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:TRSL {self.Osc.options['Trigger Slope'][0]}")
+        self.Osc.resource.write(f"TRSE EDGE,SR,{self.Osc.options['Channel'][0]},HT,TI,HV,{self.Osc.options['Holdoff'][0]}")
+        self.Osc.close_device()
+        self.log_message(thread, level, f"{oscName} Successfully Configured")
         self.isOscConfigured.set()
 
     def configureDMM(self, lock, dmmName):
-        with lock:
-            print(f"configuring{dmmName}")
-            self.Dmm = self.parent.devices[dmmName][0]
-            self.Dmm.open_device()
-            print(self.Dmm.rm.list_opened_resources())
-            self.Dmm.close_device()
-            print(self.Dmm.rm.list_opened_resources())
+        thread = "CFG-DMM"
+        level = "INFO"
+        self.log_message(thread, level, f"configuring{dmmName}")
+        self.Dmm = self.parent.devices[dmmName][0]
+        self.Dmm.open_device()
+        self.Dmm.resource.write("RST")
+        self.Dmm.resource.write(f":SENS:FUNC {self.Dmm.options['Function'][0]}")
+        func = self.Dmm.options['Function'][0][:4]
+        self.Dmm.resource.write(f"SENS:{func}:RANG:AUTO {self.auto_range}")
+        self.Dmm.resource.write(f":SENS:{func}:NPLC 1") #Default 1
+        self.Dmm.resource.write(f":SENS:{func}:LINE:SYNC OFF") #Default OFF
+        self.Dmm.resource.write(f"SENS:{func}:AZER ON")#Default ON
+        self.Dmm.resource.write(f"CALC:{func}:LIM1:STAT {self.Dmm.options['Limit'][0]}") #Default OFF
+        self.Dmm.resource.write(f"CACL:{func}:LIM1:CLE:AUTO {self.Dmm.options['Limit'][0]}") #Limit Number in GUI is 1 (LIM_), Default ON
+        self.Dmm.resource.write(f"CALC:{func}:LIM1:LOW {self.Dmm.options['Lower Limit'][0]}") #Because the voltage limit is disabled this should not be needed but may as well include it because maybe one day we do
+        self.Dmm.resource.write(f"CALC:{func}:LIM1:UPP {self.Dmm.options['Upper Limit'][0]}")
+        self.Dmm.resource.write(f"TRAC:FILL:MODE {self.Dmm.options['Reading Buffer'][0]}") #continuous fill
+        self.Dmm.resource.write(f"TRAC:POIN {self.Dmm.options['Reading Buffer'][0]}") #Buffer Size 10
+        self.Dmm.close_device()
+        self.log_message(thread, level, f"{dmmName} Successfully Configured")
         self.isDmmConfigured.set()
 
     def configurePower(self, lock, pwrName):

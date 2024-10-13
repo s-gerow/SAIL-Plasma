@@ -41,6 +41,8 @@ matplotlib.use('TkAgg')
 
 #Create Device Types
 class VisaDevice(pyvisa.resources.Resource):
+    '''Visa Device class is built from the pyvisa resource class. It contains a resource attribute for operating a device, resource manager to access device, and identifying information such as 
+    configurations and name.'''
     def __init__(self, rm: pyvisa.ResourceManager, name: str):
         super().__init__(rm, name)
         self.name = name
