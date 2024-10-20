@@ -302,7 +302,8 @@ class Experiment():
         self.log_message("MAIN", "INFO", f"BeAMED Plasma Chamber debug log started")
 
     def log_message(self, thread, level, message):
-        self.logger.debug(f"{thread}: {time.strftime('%X', time.localtime())} - {level} - {message}")
+        dt = datetime.now()
+        self.logger.debug(f"{thread}: {dt.hour}:{dt.minute}:{dt.second}.{dt.microsecond} - {level} - {message}")
 
     #I/O selection for Oscilloscope, Power, and Digital Multimeter
     def check_IO(self):
@@ -490,7 +491,7 @@ class Experiment():
         self.Osc.open_device()
         while(self.isExperimentStarted.is_set()& self.isDischargeTriggered.is_set() == False):
             VPP = self.Osc.resource.query(f"{self.Osc.options['Channel'][0]}:PARAMETER_VALUE? PKPK")
-            if VPP[13:-1] == "****":
+            if VPP[5:-1] == "****":
                 VPP_num = 0
             else:
                 VPP_num = float(VPP[13:-2])
@@ -510,11 +511,15 @@ class Experiment():
         voltage_step = int(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
         while self.isDischargeTriggered.is_set() == False:
+            if init_v == 15:
+                self.log_message("PWR", "WARN", "Input voltage reached 15 V, stopping experiment")
+                break
             self.Pwr.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
             self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             if(self.isDischargeTriggered.is_set()):
                 self.parent.after(1, self.PS_voltage_var.set(self.Pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             init_v += voltage_step
+            time.sleep(3)
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write("OUTP:STAT:IMM OFF")
