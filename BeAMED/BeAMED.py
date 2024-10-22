@@ -394,14 +394,14 @@ class Experiment():
         init_v = float(self.init_v_var.get())
         init_c = float(self.init_current_var.get())
         v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
-        #v_increase.start()
+        v_increase.start()
         #thread 8 catches trigger and queries osc to  run/stop and for waveform
         #thread 8 sends message to stop all other threads and retreive last measured values
         #all threads stop action and send values to excel sheet
     
 
     def configureOscilloscope(self, lock, oscName):
-        thread = "OSC-CFG"
+        thread = "CFG-OSC"
         level = "INFO"
         self.log_message(thread, level, f"configuring{oscName}")
         self.Osc = self.parent.devices[oscName][0]
@@ -453,8 +453,9 @@ class Experiment():
         level = "INFO"
         self.log_message(thread, level, f"configuring{pwrName}")
         self.Pwr = self.parent.devices[pwrName][0]
-        
         self.Pwr.open_device()
+        self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
+        self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
         self.Pwr.close_device()
         self.log_message(thread, level, f"{pwrName} Successfully Confirgured")
         self.isPowerConfigured.set()
@@ -491,7 +492,7 @@ class Experiment():
         self.Osc.open_device()
         while(self.isExperimentStarted.is_set()& self.isDischargeTriggered.is_set() == False):
             VPP = self.Osc.resource.query(f"{self.Osc.options['Channel'][0]}:PARAMETER_VALUE? PKPK")
-            if VPP[5:-1] == "****":
+            if VPP[13:-1] == "****":
                 VPP_num = 0
             else:
                 VPP_num = float(VPP[13:-2])
@@ -506,20 +507,29 @@ class Experiment():
         time.sleep(5)
     
     def increase_voltage(self, init_v: int, init_c: int):
+        thread = "PWR"
+        level = "INFO"
         self.Pwr.open_device()
         self.Pwr.resource.write("OUTP:STAT:IMM ON")
-        voltage_step = int(self.Pwr.options["Voltage Step Size"][0])
+        voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
         while self.isDischargeTriggered.is_set() == False:
-            if init_v == 15:
-                self.log_message("PWR", "WARN", "Input voltage reached 15 V, stopping experiment")
-                break
-            self.Pwr.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
-            self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
+            #if init_v == 15:
+            #    self.log_message("PWR", "WARN", "Input voltage reached 15 V, stopping experiment")
+            #    break
+            self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
+            self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             if(self.isDischargeTriggered.is_set()):
-                self.parent.after(1, self.PS_voltage_var.set(self.Pwr.query("SOUR:VOLT:LEV:IMM:AMPL?")))
+                self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
+                self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
+                self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
+                self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:VOLT:DC?')} V")
             init_v += voltage_step
             time.sleep(3)
+        self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
+        self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
+        self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
+        self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:VOLT:DC?')} V")
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write("OUTP:STAT:IMM OFF")
