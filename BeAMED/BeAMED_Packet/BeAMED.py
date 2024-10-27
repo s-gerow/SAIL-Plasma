@@ -4,7 +4,14 @@ class Experiment():
     def __init__(self, parent: ChamberApp):
         
         parent.protocol('WM_DELETE_WINDOW', lambda: self.clean_exit()) 
+        #The lambda: function allows the return of this function to be returned "implicitely", 
+        #ie. self.clean_exit() will not be traditionally called until the root protocol is met
         #_________________Attributes of Experiment__________________________________#
+            #The parent attribute represents the ChamberApp which is needed to import this experiment
+            #The logger is the custom debug logger I built to output errors and information as the experiment runs
+            #The rm is the resource manager which comes from the parent and is used in pyvisa to communicate with devices
+            #Dmm,Osc/Pwr are None-objects at start until they are properly imported, these attributes should be a pyvisa-object from ChamberApp.py
+            #cont_acq, v_out, auto_range are variables to store the value of the associated buttons to initlize experiment
         self.parent = parent
         self.logger = logging.getLogger('BeAMED')
         self.rm = parent.rm
@@ -16,6 +23,7 @@ class Experiment():
         self.auto_range = None
 
         #_________________Experiment Events_________________________________________#
+            #Each of these events represent an important benchmark in the setup of the experiment. 
         self.isOscConfigured = Event()
         self.isDmmConfigured = Event()
         self.isPowerConfigured = Event()
@@ -23,7 +31,9 @@ class Experiment():
         self.isTargetPressure = Event()
         self.isExperimentStarted = Event()
         self.StopALL = Event()
+
         class experimentEvent(Event):
+            '''A custom Event class to store wether the experiment is triggered or not as well as store and output the relavent output data.'''
             def __init__(self):
                 super().__init__()
                 self.pressure = ""
@@ -39,7 +49,13 @@ class Experiment():
                     print("Event not triggered")
         self.isDischargeTriggered = experimentEvent()
         
+        #***************************************************************************#
+        #All sections here until the end of the __init__ method are specfically formating frames and widgets for user input.
+        #If you need to access any of this information, a tkinter variable will be named "self.var_name". This variable is how you access 
+        #the data from these inputs. If you want to add a new feild you do not need to label the label, input box, and variable with "self.", 
+        #only the variable.
         #_________________Configure Experiment Frame________________________________#
+            #Splits the Experiment Frame of the Chamber app into two frames for input and output
         parent.experimentFrame.grid_columnconfigure(0, weight=1)
         parent.experimentFrame.grid_columnconfigure(1, weight=1)
         parent.experimentFrame.grid_rowconfigure(0, weight=1)
@@ -50,6 +66,7 @@ class Experiment():
         DisplayFrame.grid(row=0, column=1, sticky='nsew')
         
         #_________________Input Device Frame________________________________________#
+            #A frame to contain dropdowns to select devices from the pyvisa resource menu
         device_opt_frame = tk.Frame(IOFrame)
         device_opt_frame.grid(row=0, column=0)
         
@@ -69,6 +86,7 @@ class Experiment():
         self.osc_cbox.grid(row=2,column=1)
         
         #_________________Frame for CheckBox Settings at Experiment Startup_________#
+            #Frame holding checkboxes for configurations
         enabledisable_frame = tk.Frame(IOFrame)
         enabledisable_frame.grid(row=0,column=1)
         
@@ -83,7 +101,7 @@ class Experiment():
         self.trig_true_image.put(("lime"), to=(0,0,49,49))
         self.trig_false_image.put(("green"), to=(0,0,49,49))
         
-        self.cont_osc_var = tk.StringVar()
+        self.cont_osc_var = tk.StringVar(value = "Disable")
         tk.Label(enabledisable_frame, text='Enable Continuous Acquisition O-Scope (T: Enable)').grid(row=0 )
         self.cont_button = tk.Checkbutton(enabledisable_frame, 
                                 text = 'T: Enable',
@@ -97,7 +115,7 @@ class Experiment():
                                 command = lambda: self.toggle_check_btn(self.cont_button, self.cont_osc_var))
         self.cont_button.grid(row=1 )
         
-        self.auto_range_var = tk.StringVar()
+        self.auto_range_var = tk.StringVar(value = "Disable")
         tk.Label(enabledisable_frame, text = 'Auto Range DMM (T: Enable)').grid(row=2 )
         self.auto_button = tk.Checkbutton(enabledisable_frame, 
                                     text = 'T: Enable',
@@ -111,7 +129,7 @@ class Experiment():
                                     command = lambda: self.toggle_check_btn(self.auto_button, self.auto_range_var))
         self.auto_button.grid(row=3 )
         
-        self.v_out_var = tk.StringVar()
+        self.v_out_var = tk.StringVar(value = "Disable")
         tk.Label(enabledisable_frame, text = 'Enable V-Output Power (T: Enable)').grid(row=4 )
         self.vout_button = tk.Checkbutton(enabledisable_frame, 
                                 text = 'T:Enable',
@@ -277,6 +295,8 @@ class Experiment():
                         ).grid(row=3, column=1)
         
     def clean_exit(self):
+        '''clean_exit() is used by the parent menu to intercept the "X' button at the top right and ensure that all 
+        threads and open processes are closed before the UI quits'''
         level = "INFO"
         thread = "MAIN"
         self.log_message(thread, level, f"Quitting Application. Cleaning up loose threads.")
@@ -288,6 +308,7 @@ class Experiment():
 
 
     def toggle_check_btn(self, btn, var):
+        '''toggle_check_btn allows the check buttons to change their text when they are activated by clicking'''
         if var.get() == "Enable":
             btn.configure(text='T: Enable')
         elif var.get() == "Disable":
@@ -295,6 +316,7 @@ class Experiment():
 
     
     def start_log(self):
+        '''start_log() initlizes the logger into a file called debug.log which will record events for the experiment'''
         handler = logging.FileHandler('debug.log', mode = 'w')
         handler.setLevel(logging.DEBUG)
         self.logger.addHandler(handler)
@@ -302,11 +324,13 @@ class Experiment():
         self.log_message("MAIN", "INFO", f"BeAMED Plasma Chamber debug log started")
 
     def log_message(self, thread, level, message):
+        '''Adds a message to the debug file'''
         dt = datetime.now()
         self.logger.debug(f"{thread}: {dt.hour}:{dt.minute}:{dt.second}.{dt.microsecond} - {level} - {message}")
 
     #I/O selection for Oscilloscope, Power, and Digital Multimeter
     def check_IO(self):
+        '''This method adds the resources from the pyvisa resource manager to the dropdown boxes'''
         IO_opts = ["Refresh"]
         for i in self.rm.list_resources():
             if self.rm.list_resources_info()[i][4] == None:
@@ -316,6 +340,7 @@ class Experiment():
         return IO_opts
 
     def update_combo_box(self, event, cbox_name):
+        '''When a dropdown box is set to refresh, it will refresh all of the dropdown boxes to new values using check_IO()'''
         IO_opts = self.check_IO()
         # Update the combo box with new resources
         if cbox_name.get() == "Refresh":
@@ -327,6 +352,7 @@ class Experiment():
             self.parent.generate_configuration_frame(filename= cbox_name.get())
     
     def test_trigger_experiment(self):
+        '''test method which will trigger the event without external input'''
         if self.triggered_var.get() == 1:
             self.isDischargeTriggered.set()
             print(self.isDischargeTriggered.is_set())
@@ -336,24 +362,29 @@ class Experiment():
             print(self.isDischargeTriggered.is_set())
 
     def run_experiment(self, event = None):
+        '''This is the main method for the experiment class which is used to start the experiment. All experiment logic should be included 
+        in this method'''
         thread = "MAIN"
         level = "INFO"
+        #First check to ensure voltage output is enabled and do not start the experiment if it is disabled
         if self.v_out_var.get() == "Disable":
             messagebox.showerror("Experiment Initilization Error", "Voltage Output Diable.\nPlease enable voltage output then try again", icon=messagebox.ERROR)
             return
-        resource_lock = Lock()
-        #nidaqmx.system.System.local().devices['NI_DAQ'].reset_device()
+        #start the debug log and clear the oscilloscope plot for a new experiment
         self.start_log()
         self.axes.clear()
+        #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
         self.isDischargeTriggered.clear()
         self.isExperimentStarted.set()
-        #thread configures oscilliscope (thread 1)
+        #initilize each object from the dropdown boxes
         oscName = self.osc_cbox.get()
         dmmName = self.dmm_cbox.get()
         pwrName = self.pwr_cbox.get()
+        #use the chamber_app parent to configure above devices with the values stored in the configuration frames of the chamberApp
         self.parent.devices[pwrName][1].configureAll()
         self.parent.devices[oscName][1].configureAll()
         self.parent.devices[dmmName][1].configureAll()
+        #Check to enable auto range and continuous acquisition
         if self.cont_osc_var.get() == "Enable":
             self.cont_acq = "NORM"
         else:
@@ -362,41 +393,43 @@ class Experiment():
             self.auto_range = "ON"
         else:
             self.auto_range = "OFF"
+        #Initilize threads to configure pyvisa devices
         osccfg = Thread(target = lambda: self.configureOscilloscope(resource_lock, oscName))
         dmmcfg = Thread(target = lambda: self.configureDMM(resource_lock, dmmName))
         pwrcfg = Thread(target = lambda: self.configurePower(resource_lock,pwrName))
         configurationThreads = [ osccfg, dmmcfg, pwrcfg]
+        #Start configuration threads and wait for them to complete before continuing
         for thread in configurationThreads:
             self.log_message(thread, level,f"starting {thread} thread")
             thread.start()
         for thread in configurationThreads:
             thread.join()
-        print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
-        #thread configures dmm (thread 2)
-        #thread configures power (thread 3)
+        #print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
         #all previous threads should be done at this point
-        #thread starts recording pressure (thread 5)
+        #thread starts recording pressure continuouslly until the end of the experiment
         self.log_message(thread, level, "Starting Continuous Pressure Reading")
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
         #automated feedthrough grounds the nodes and sets to value (wait until done)
+
         #notification to start pumping to vacuum (10sec)
+
         #thread monitors pressure to turn on MFC (thread 6)
+
         #thread stops mfc at target pressure. 
-        #thread starts reading DMM (thread 7)
+
+        #thread starts reading DMM
         self.log_message(thread, level, "Starting Continuos Voltage Reading")
         live_dmm = Thread(target = lambda: self.readDmm(), daemon=True)
         live_dmm.start()
-        #thread monitors oscilliscope for trigger (thread 8)
+        #thread monitors oscilliscope for trigger
         live_osc = Thread(target = lambda: self.readOsc(), daemon = True)
         live_osc.start()
-        #thread increases voltage at set rate (thread 9)
+        #thread increases voltage at set rate 0.5V/3s
         init_v = float(self.init_v_var.get())
         init_c = float(self.init_current_var.get())
         v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
         v_increase.start()
-        #thread 8 catches trigger and queries osc to  run/stop and for waveform
-        #thread 8 sends message to stop all other threads and retreive last measured values
         #all threads stop action and send values to excel sheet
     
 
@@ -576,11 +609,12 @@ class Experiment():
 
 
 if __name__ == "__main__":
-
+    #Automatically creates chamebr app and imports experiment
+    #For this to work you will need to write in the file location of the current file as well as the file location of the configuration files
     chamber = ChamberApp()
 
     chamber.menubar.load_experiment("./BeAMED/BeAMED.py")
-
+    
     for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
         file = "./BeAMED/" + config
         chamber.generate_configuration_frame(filepath = file)
