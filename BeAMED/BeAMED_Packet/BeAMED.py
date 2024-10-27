@@ -228,7 +228,7 @@ class Experiment():
 
         #Start/Stop Buttons
         ttk.Button(experimentControlFrame, text = 'START', command=self.run_experiment).grid(row=0)
-        ttk.Button(experimentControlFrame, text = 'STOP',command=None).grid(row=1)
+        ttk.Button(experimentControlFrame, text = 'STOP',command=self.clean_exit).grid(row=1)
 
         self.triggered_var = tk.IntVar()
         tk.Label(experimentControlFrame,
@@ -613,10 +613,10 @@ if __name__ == "__main__":
     #For this to work you will need to write in the file location of the current file as well as the file location of the configuration files
     chamber = ChamberApp()
 
-    chamber.menubar.load_experiment("./BeAMED/BeAMED.py")
+    chamber.menubar.load_experiment(".\BeAMED\BeAMED_Packet\BeAMED.py")
     
     for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
-        file = "./BeAMED/" + config
+        file = ".\BeAMED\BeAMED_Packet/" + config
         chamber.generate_configuration_frame(filepath = file)
 
     chamber.mainloop()
