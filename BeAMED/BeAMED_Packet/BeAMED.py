@@ -294,6 +294,13 @@ class Experiment():
                         textvariable=self.pressure_var
                         ).grid(row=3, column=1)
         
+        #_________________Create New Dropdown Options_________________________#
+        self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
+        self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough")
+        self.parent.menubar.fileMenu.add_command(label = "Export")
+        self.parent.menubar.fileMenu.add_separator()
+        self.parent.menubar.fileMenu.add_command(label="Exit", command = self.clean_exit)
+        
     def clean_exit(self):
         '''clean_exit() is used by the parent menu to intercept the "X' button at the top right and ensure that all 
         threads and open processes are closed before the UI quits'''
@@ -394,9 +401,9 @@ class Experiment():
         else:
             self.auto_range = "OFF"
         #Initilize threads to configure pyvisa devices
-        osccfg = Thread(target = lambda: self.configureOscilloscope(resource_lock, oscName))
-        dmmcfg = Thread(target = lambda: self.configureDMM(resource_lock, dmmName))
-        pwrcfg = Thread(target = lambda: self.configurePower(resource_lock,pwrName))
+        osccfg = Thread(target = lambda: self.configureOscilloscope(oscName))
+        dmmcfg = Thread(target = lambda: self.configureDMM(dmmName))
+        pwrcfg = Thread(target = lambda: self.configurePower(pwrName))
         configurationThreads = [ osccfg, dmmcfg, pwrcfg]
         #Start configuration threads and wait for them to complete before continuing
         for thread in configurationThreads:
@@ -433,7 +440,7 @@ class Experiment():
         #all threads stop action and send values to excel sheet
     
 
-    def configureOscilloscope(self, lock, oscName):
+    def configureOscilloscope(self, oscName):
         thread = "CFG-OSC"
         level = "INFO"
         self.log_message(thread, level, f"configuring{oscName}")
@@ -455,7 +462,7 @@ class Experiment():
         self.log_message(thread, level, f"{oscName} Successfully Configured")
         self.isOscConfigured.set()
 
-    def configureDMM(self, lock, dmmName):
+    def configureDMM(self, dmmName):
         thread = "CFG-DMM"
         level = "INFO"
         self.log_message(thread, level, f"configuring{dmmName}")
@@ -481,7 +488,7 @@ class Experiment():
         self.log_message(thread, level, f"{dmmName} Successfully Configured")
         self.isDmmConfigured.set()
 
-    def configurePower(self, lock, pwrName):
+    def configurePower(self, pwrName):
         thread = "CFG-PWR"
         level = "INFO"
         self.log_message(thread, level, f"configuring{pwrName}")
@@ -602,6 +609,9 @@ class Experiment():
         self.axes.set_xlabel('Time')
 
         self.figure_canvas.draw()
+
+    def open_export_panel(self):
+        
         
 
     
@@ -613,10 +623,10 @@ if __name__ == "__main__":
     #For this to work you will need to write in the file location of the current file as well as the file location of the configuration files
     chamber = ChamberApp()
 
-    chamber.menubar.load_experiment(".\BeAMED\BeAMED_Packet\BeAMED.py")
+    chamber.menubar.load_experiment("./BeAMED/BeAMED_Packet/BeAMED.py")
     
     for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
-        file = ".\BeAMED\BeAMED_Packet/" + config
+        file = "./BeAMED/BeAMED_Packet/" + config
         chamber.generate_configuration_frame(filepath = file)
 
     chamber.mainloop()

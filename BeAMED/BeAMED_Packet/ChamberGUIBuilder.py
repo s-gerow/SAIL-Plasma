@@ -269,11 +269,10 @@ class ExperimentMenu(tk.Menu):
         super().__init__(master)
         self.master = master
 
-        fileMenu = tk.Menu(self, tearoff=0)
-        fileMenu.add_command(label="New Experiment", command=self.open_experiment)
-        fileMenu.add_command(label="Run", command=self.run_experiment)
-        fileMenu.add_separator()
-        fileMenu.add_command(label="Exit")
+        self.fileMenu = tk.Menu(self, tearoff=0)
+        self.fileMenu.add_command(label="New Experiment", command=self.open_experiment)
+        self.fileMenu.add_command(label="Run", command=self.run_experiment)
+        
 
         helpMenu = tk.Menu(self, tearoff=0)
         helpMenu.add_command(label="About")
@@ -286,7 +285,7 @@ class ExperimentMenu(tk.Menu):
         self.deviceMenu.add_cascade(label="Configure Device", menu=self.configureListMenu)
 
         # Adding cascades
-        self.add_cascade(label="File", menu=fileMenu)
+        self.add_cascade(label="File", menu=self.fileMenu)
         self.add_cascade(label="Devices", menu=self.deviceMenu)
         self.add_cascade(label="Help", menu=helpMenu)
 
