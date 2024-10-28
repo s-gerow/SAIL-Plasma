@@ -1,5 +1,6 @@
 from ChamberGUIBuilder import *
-
+import openpyxl as op
+        
 class Experiment():
     def __init__(self, parent: ChamberApp):
         
@@ -297,7 +298,7 @@ class Experiment():
         #_________________Create New Dropdown Options_________________________#
         self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough")
-        self.parent.menubar.fileMenu.add_command(label = "Export")
+        self.parent.menubar.fileMenu.add_command(label = "Export", command=self.open_export_panel)
         self.parent.menubar.fileMenu.add_separator()
         self.parent.menubar.fileMenu.add_command(label="Exit", command = self.clean_exit)
         
@@ -611,7 +612,47 @@ class Experiment():
         self.figure_canvas.draw()
 
     def open_export_panel(self):
-        
+        export_dialog = ExcelWindow(experiment=self)
+        export_dialog.grab_set()
+
+
+class ExcelWindow(tk.Toplevel):
+    def __init__(self, experiment:Experiment):
+        super().__init__(experiment.parent)
+
+        self.workbook = None
+        self.active_sheet = None
+        self.sheet_options = []
+
+        self.geometry('300x300')
+        self.title("Export Data to Excel")
+
+        self.mainframe = tk.Frame(self)
+        self.mainframe.pack()
+
+        tk.Button(self.mainframe, text="Choose Excel File", command = self.get_new_workbook).grid(row=0, column=0)
+        self.workbookVar = tk.StringVar()
+        tk.Spinbox(self.mainframe, state='readonly', textvariable=self.workbookVar).grid(row=1, column=0)
+
+        self.sheetvar = tk.StringVar()
+        tk.Label(self.mainframe, text = "Active Sheet").grid(row = 0, column=1)
+        self.sheetbox = ttk.Combobox(self.mainframe, values = self.sheet_options, state="disabled")
+        self.sheetbox.grid(row=1, column=1)
+
+    def get_new_workbook(self):
+        filepath = fd.askopenfilename()
+        filename = os.path.splitext(os.path.basename(filepath))[0]+os.path.splitext(os.path.basename(filepath))[1]
+        self.workbookVar.set(filename)
+        self.workbook = op.load_workbook(filename = filepath)
+        self.sheetbox['state'] = "readonly"
+        self.update_sheet_options()
+        self.sheetbox['values'] = self.sheet_options
+
+    def update_sheet_options(self):
+        for sheet in self.workbook.sheetnames:
+            self.sheet_options.append(sheet)
+        self.sheet_options.append("New")
+
         
 
     
