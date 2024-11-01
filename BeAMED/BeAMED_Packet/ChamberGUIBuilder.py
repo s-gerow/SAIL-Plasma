@@ -15,8 +15,9 @@ import os
 import csv
 import importlib.util
 
+
 # Define additional required packages
-required = {'pyvisa', 'matplotlib', 'numpy', 'nidaqmx'}
+required = {'pyvisa', 'matplotlib', 'numpy', 'nidaqmx', 'pandas', 'openpyxl'}
 # Get installed packages
 installed = {pkg.metadata['Name'].lower() for pkg in importlib.metadata.distributions()}
 # Find missing packages
@@ -36,6 +37,8 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationTool
 import numpy as np
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
+import openpyxl as op
+import pandas as pd
 
 #Matplotlib Config
 matplotlib.use('TkAgg')

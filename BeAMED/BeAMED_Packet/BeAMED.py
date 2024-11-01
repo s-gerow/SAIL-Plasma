@@ -1,5 +1,5 @@
 from ChamberGUIBuilder import *
-import openpyxl as op
+
         
 class Experiment():
     def __init__(self, parent: ChamberApp):
@@ -22,6 +22,12 @@ class Experiment():
         self.cont_acq = None
         self.v_out = None
         self.auto_range = None
+
+        #_________________Experiment Data Storage___________________________________#
+        self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_Exact(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p)', 'd(d)', 'd(pd)']
+        self.experimentOutputDataFrame = pd.DataFrame(columns=self.ExperimentOutputHeader)
+        self.ExperimentRunValues = [0,0,0,0,0,0,0,0,0,0,0,0] 
+        self.SaveFileType = "CSV"
 
         #_________________Experiment Events_________________________________________#
             #Each of these events represent an important benchmark in the setup of the experiment. 
@@ -258,7 +264,7 @@ class Experiment():
         self.axes.set_xlabel('Time')
         self.figure_canvas.get_tk_widget().pack(side='top')
 
-        #_________________Frame for Experiment Output Graph_________________________#
+        #_________________Frame for Experiment Output_______________________________#
         experimentOutputFrame = tk.Frame(DisplayFrame)
         experimentOutputFrame.grid(row=1, column=1)
 
@@ -295,10 +301,20 @@ class Experiment():
                         textvariable=self.pressure_var
                         ).grid(row=3, column=1)
         
+        tk.Label(experimentOutputFrame, text="Save to:").grid(column=2, row=0)
+        self.SaveFile = tk.StringVar()
+        self.saveOptionBox = tk.Spinbox(experimentOutputFrame, state='readonly', textvariable=self.SaveFile).grid(row=0, column=4)
+        
+        
         #_________________Create New Dropdown Options_________________________#
         self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough")
-        self.parent.menubar.fileMenu.add_command(label = "Export", command=self.open_export_panel)
+        self.parent.menubar.fileMenu.add_command(label ="Import Data")
+        self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
+        self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
+        self.parent.menubar.fileMenu.add_cascade(label = "Export As...", menu=self.exportMenu)
+        self.exportMenu.add_command(label = "Excel", command=self.open_export_panel)
+        self.exportMenu.add_command(label = "CSV")
         self.parent.menubar.fileMenu.add_separator()
         self.parent.menubar.fileMenu.add_command(label="Exit", command = self.clean_exit)
         
@@ -384,6 +400,8 @@ class Experiment():
         #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
         self.isDischargeTriggered.clear()
         self.isExperimentStarted.set()
+        dt = datetime.now()
+        self.ExperimentRunValues[0] = f"{dt.month}/{dt.day}/{dt.year} {dt.hour}:{dt.min}"
         #initilize each object from the dropdown boxes
         oscName = self.osc_cbox.get()
         dmmName = self.dmm_cbox.get()
@@ -439,6 +457,10 @@ class Experiment():
         v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
         v_increase.start()
         #all threads stop action and send values to excel sheet
+        v_increase.join()
+        time.sleep(1)
+        self.save_experiment_to_local()
+
     
 
     def configureOscilloscope(self, oscName):
@@ -555,9 +577,6 @@ class Experiment():
         voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
         while self.isDischargeTriggered.is_set() == False:
-            #if init_v == 15:
-            #    self.log_message("PWR", "WARN", "Input voltage reached 15 V, stopping experiment")
-            #    break
             self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
             self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             if(self.isDischargeTriggered.is_set()):
@@ -582,7 +601,6 @@ class Experiment():
         self.Osc.resource.write('DATA:WIDTH 2')
         self.Osc.resource.write('DATA:START 0')
         self.Osc.resource.write('DATA: STOP 1000')
-
         
         sample_rate = self.Osc.resource.query("SARA?")
         time_inter = 1/float(sample_rate[5:-5])
@@ -611,47 +629,49 @@ class Experiment():
 
         self.figure_canvas.draw()
 
+    def save_experiment_to_local(self):
+        self.ExperimentRunValues[2] = "NaN" #Time is set at start of experiment
+        self.ExperimentRunValues[2] = "NaN" #Need to find how to get DY from osc
+        self.ExperimentRunValues[2] = self.PS_voltage_var.get() #power supply voltage output
+        self.ExperimentRunValues[3] = self.v_out_var.get() #read voltage out from dmm
+        self.ExperimentRunValues[4] = self.PS_current_var.get() #power supply current output
+        self.ExperimentRunValues[5] = self.pressure_var.get() #pressure read by pressure sensor
+        self.ExperimentRunValues[6] = self.init_pressure.get() #target pressure
+        self.ExperimentRunValues[7] = self.electrode_pos_var.get() #distance
+        self.ExperimentRunValues[8] = float(self.v_out_var.get())*0.000001 #uncertainty in measured voltage
+        self.ExperimentRunValues[9] = float(self.pressure_var.get())*0.1 #uncertainty in measured pressure
+        self.ExperimentRunValues[10] = 0.1
+        self.ExperimentRunValues[11] = (float(self.pressure_var.get())*float(self.electrode_pos_var.get()))*(((float(self.pressure_var.get())*0.1)/float(self.pressure_var.get()))+(0.1/float(self.electrode_pos_var.get())))
+        newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
+        self.experimentOutputDataFrame = pd.concat([newdataframe, self.experimentOutputDataFrame])
+
+    def save_to_new(self):
+        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_BeAMED_Output.csv"
+        self.experimentOutputDataFrame.to_csv(filename, mode='x')
+
+    def save_to_current(self):
+        if self.SaveFile.get() == "":
+            response = messagebox.askokcancel(title="Save As?", message="You have not selected a file to save to. This will create a new save file? Is that okay?")
+            if response == True:
+                self.save_to_new()
+            else: return
+        if self.SaveFileType == "CSV":
+            filename = self.SaveFile.get()
+            self.experimentOutputDataFrame.to_csv(filename, mode = 'a')
+
+
+    def open_save_file(self):
+        pass
+
+    def export_to_csv(self):
+        pass
+
+    def export_to_excel(self):
+        pass
+
     def open_export_panel(self):
-        export_dialog = ExcelWindow(experiment=self)
-        export_dialog.grab_set()
+        pass
 
-
-class ExcelWindow(tk.Toplevel):
-    def __init__(self, experiment:Experiment):
-        super().__init__(experiment.parent)
-
-        self.workbook = None
-        self.active_sheet = None
-        self.sheet_options = []
-
-        self.geometry('300x300')
-        self.title("Export Data to Excel")
-
-        self.mainframe = tk.Frame(self)
-        self.mainframe.pack()
-
-        tk.Button(self.mainframe, text="Choose Excel File", command = self.get_new_workbook).grid(row=0, column=0)
-        self.workbookVar = tk.StringVar()
-        tk.Spinbox(self.mainframe, state='readonly', textvariable=self.workbookVar).grid(row=1, column=0)
-
-        self.sheetvar = tk.StringVar()
-        tk.Label(self.mainframe, text = "Active Sheet").grid(row = 0, column=1)
-        self.sheetbox = ttk.Combobox(self.mainframe, values = self.sheet_options, state="disabled")
-        self.sheetbox.grid(row=1, column=1)
-
-    def get_new_workbook(self):
-        filepath = fd.askopenfilename()
-        filename = os.path.splitext(os.path.basename(filepath))[0]+os.path.splitext(os.path.basename(filepath))[1]
-        self.workbookVar.set(filename)
-        self.workbook = op.load_workbook(filename = filepath)
-        self.sheetbox['state'] = "readonly"
-        self.update_sheet_options()
-        self.sheetbox['values'] = self.sheet_options
-
-    def update_sheet_options(self):
-        for sheet in self.workbook.sheetnames:
-            self.sheet_options.append(sheet)
-        self.sheet_options.append("New")
 
         
 
