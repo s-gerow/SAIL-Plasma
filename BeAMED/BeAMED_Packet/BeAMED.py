@@ -26,8 +26,8 @@ class Experiment():
         #_________________Experiment Data Storage___________________________________#
         self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_Exact(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p)', 'd(d)', 'd(pd)']
         self.experimentOutputDataFrame = pd.DataFrame(columns=self.ExperimentOutputHeader)
-        self.ExperimentRunValues = [0,0,0,0,0,0,0,0,0,0,0,0] 
-        self.SaveFileType = "CSV"
+        self.ExperimentRunValues = [] 
+        self.SaveFileType = None
 
         #_________________Experiment Events_________________________________________#
             #Each of these events represent an important benchmark in the setup of the experiment. 
@@ -276,25 +276,25 @@ class Experiment():
                         text = "Voltage Output").grid(row=2, column=0)
         tk.Label(experimentOutputFrame,
                         text = "Pressure (Torr)").grid(row=3, column=0)
-        self.PS_voltage_var = tk.IntVar()
+        self.PS_voltage_var = tk.DoubleVar()
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.PS_voltage_var
                         ).grid(row=0, column=1)
-        self.PS_current_var = tk.IntVar()
+        self.PS_current_var = tk.DoubleVar()
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.PS_current_var
                         ).grid(row=1, column=1)
-        self.voltage_out_var = tk.IntVar()
+        self.voltage_out_var = tk.DoubleVar()
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.voltage_out_var
                         ).grid(row=2, column=1)
-        self.pressure_var = tk.IntVar()
+        self.pressure_var = tk.DoubleVar()
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
@@ -400,8 +400,7 @@ class Experiment():
         #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
         self.isDischargeTriggered.clear()
         self.isExperimentStarted.set()
-        dt = datetime.now()
-        self.ExperimentRunValues[0] = f"{dt.month}/{dt.day}/{dt.year} {dt.hour}:{dt.min}"
+        
         #initilize each object from the dropdown boxes
         oscName = self.osc_cbox.get()
         dmmName = self.dmm_cbox.get()
@@ -457,9 +456,7 @@ class Experiment():
         v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
         v_increase.start()
         #all threads stop action and send values to excel sheet
-        v_increase.join()
-        time.sleep(1)
-        self.save_experiment_to_local()
+        
 
     
 
@@ -628,22 +625,28 @@ class Experiment():
         self.axes.set_xlabel('Time')
 
         self.figure_canvas.draw()
+        self.save_experiment_to_local()
 
     def save_experiment_to_local(self):
-        self.ExperimentRunValues[2] = "NaN" #Time is set at start of experiment
-        self.ExperimentRunValues[2] = "NaN" #Need to find how to get DY from osc
-        self.ExperimentRunValues[2] = self.PS_voltage_var.get() #power supply voltage output
-        self.ExperimentRunValues[3] = self.v_out_var.get() #read voltage out from dmm
-        self.ExperimentRunValues[4] = self.PS_current_var.get() #power supply current output
-        self.ExperimentRunValues[5] = self.pressure_var.get() #pressure read by pressure sensor
-        self.ExperimentRunValues[6] = self.init_pressure.get() #target pressure
-        self.ExperimentRunValues[7] = self.electrode_pos_var.get() #distance
-        self.ExperimentRunValues[8] = float(self.v_out_var.get())*0.000001 #uncertainty in measured voltage
-        self.ExperimentRunValues[9] = float(self.pressure_var.get())*0.1 #uncertainty in measured pressure
-        self.ExperimentRunValues[10] = 0.1
-        self.ExperimentRunValues[11] = (float(self.pressure_var.get())*float(self.electrode_pos_var.get()))*(((float(self.pressure_var.get())*0.1)/float(self.pressure_var.get()))+(0.1/float(self.electrode_pos_var.get())))
+        current_run = ["NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN"]
+        dt = datetime.now()
+        current_run[0] =  f"{dt.month}/{dt.day}/{dt.year} {dt.hour}:{dt.minute}" #Time is set at end of experiment
+        current_run[1] = "NaN" #Need to find how to get DY from osc
+        current_run[2] = float(self.PS_voltage_var.get()) #power supply voltage output
+        current_run[3] = float(self.voltage_out_var.get()) #read voltage out from dmm
+        current_run[4] = float(self.PS_current_var.get()) #power supply current output
+        current_run[5] = float(self.pressure_var.get()) #pressure read by pressure sensor
+        current_run[6] = float(self.init_pressure.get()) #target pressure
+        current_run[7] = float(self.electrode_pos_var.get()) #distance
+        current_run[8] = float(self.voltage_out_var.get())*0.000001 #uncertainty in measured voltage
+        current_run[9] = float(self.pressure_var.get())*0.1 #uncertainty in measured pressure
+        current_run[10] = 0.1
+        current_run[11] = (float(self.pressure_var.get())*float(self.electrode_pos_var.get()))*(((float(self.pressure_var.get())*0.1)/float(self.pressure_var.get()))+(0.1/float(self.electrode_pos_var.get())))
+        
+        self.ExperimentRunValues.append(current_run)
         newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
         self.experimentOutputDataFrame = pd.concat([newdataframe, self.experimentOutputDataFrame])
+        print(self.experimentOutputDataFrame)
 
     def save_to_new(self):
         filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_BeAMED_Output.csv"
