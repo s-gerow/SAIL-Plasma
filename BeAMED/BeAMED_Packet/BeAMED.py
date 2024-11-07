@@ -28,6 +28,7 @@ class Experiment():
         self.experimentOutputDataFrame = pd.DataFrame(columns=self.ExperimentOutputHeader)
         self.ExperimentRunValues = [] 
         self.SaveFileType = None
+        self.isSaved = Event()
 
         #_________________Experiment Events_________________________________________#
             #Each of these events represent an important benchmark in the setup of the experiment. 
@@ -36,6 +37,7 @@ class Experiment():
         self.isPowerConfigured = Event()
         self.isPressureReading = Event()
         self.isTargetPressure = Event()
+        self.isFeedthroughset
         self.isExperimentStarted = Event()
         self.StopALL = Event()
 
@@ -432,13 +434,14 @@ class Experiment():
         #print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
         #all previous threads should be done at this point
         #thread starts recording pressure continuouslly until the end of the experiment
+        pressure_lock = Lock() #this is to allow the live_pressure and MFcpressure to access the same variables without hanging the application
         self.log_message(thread, level, "Starting Continuous Pressure Reading")
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
         #automated feedthrough grounds the nodes and sets to value (wait until done)
 
         #notification to start pumping to vacuum (10sec)
-
+        
         #thread monitors pressure to turn on MFC (thread 6)
 
         #thread stops mfc at target pressure. 
@@ -520,7 +523,7 @@ class Experiment():
         self.log_message(thread, level, f"{pwrName} Successfully Confirgured")
         self.isPowerConfigured.set()
 
-    def read_pressure(self):
+    def read_pressure(self, pressure_lock: Lock):
         pressureSensor = DAQDevice("Pressure")
         pressureSensor.task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
         pressureSensor.task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
@@ -529,7 +532,8 @@ class Experiment():
                 pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
                 unfiltered_avg = np.median(pressure_sensor_voltage)
                 true_pressure = 10**(unfiltered_avg - 5)
-                self.parent.after(1, lambda: self.pressure_var.set(true_pressure))
+                with pressure_lock:
+                    self.parent.after(1, lambda: self.pressure_var.set(true_pressure))
                 if(self.isDischargeTriggered.is_set()):
                     self.isDischargeTriggered.pressure = true_pressure
                     self.log_message("Pressure", "INFO", f"Discharge Triggered at {true_pressure} Torr")
@@ -565,6 +569,15 @@ class Experiment():
                 return
         self.Osc.close_device()
         time.sleep(5)
+
+    def runMFC(self, pressure_lock: Lock):
+        pass
+
+    def zeroFeedthrough(self):
+        pass
+
+    def moveFeedthrough(self):
+        pass
     
     def increase_voltage(self, init_v: int, init_c: int):
         thread = "PWR"
@@ -643,14 +656,30 @@ class Experiment():
         current_run[10] = 0.1
         current_run[11] = (float(self.pressure_var.get())*float(self.electrode_pos_var.get()))*(((float(self.pressure_var.get())*0.1)/float(self.pressure_var.get()))+(0.1/float(self.electrode_pos_var.get())))
         
-        self.ExperimentRunValues.append(current_run)
+        self.ExperimentRunValues[0] = current_run
         newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
         self.experimentOutputDataFrame = pd.concat([newdataframe, self.experimentOutputDataFrame])
+        self.isSaved.clear()
         print(self.experimentOutputDataFrame)
 
     def save_to_new(self):
         filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_BeAMED_Output.csv"
-        self.experimentOutputDataFrame.to_csv(filename, mode='x')
+        try:
+            self.experimentOutputDataFrame.to_csv(filename, mode='x', index=False)
+            self.SaveFileType = "CSV"
+            self.SaveFile.set(filename)
+            self.isSaved.set()
+            self.experimentOutputDataFrame.iloc[0:0]
+        except FileExistsError:
+            output = messagebox.askokcancel("File Already Exists", "A file with today's date already exists. This action will overide the file. Do you want to continue?")
+            if output == True:
+                self.experimentOutputDataFrame.to_csv(filename, mode='w', index=False)
+                self.SaveFileType = "CSV"
+                self.SaveFile.set(filename)
+                self.isSaved.set()
+                self.experimentOutputDataFrame.iloc[0:0]
+            else:
+                return
 
     def save_to_current(self):
         if self.SaveFile.get() == "":
@@ -658,10 +687,11 @@ class Experiment():
             if response == True:
                 self.save_to_new()
             else: return
-        if self.SaveFileType == "CSV":
+        elif self.SaveFileType == "CSV":
             filename = self.SaveFile.get()
-            self.experimentOutputDataFrame.to_csv(filename, mode = 'a')
-
+            self.experimentOutputDataFrame.to_csv(filename, mode = 'a', header= False, index = False)
+            self.isSaved.set()
+            self.experimentOutputDataFrame.iloc[0:0]
 
     def open_save_file(self):
         pass

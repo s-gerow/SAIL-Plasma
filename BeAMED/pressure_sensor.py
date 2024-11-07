@@ -70,8 +70,8 @@ class pressure_gui(tk.Tk):
                 self.after(1, lambda: self.pressure.set(true_pressure))
         
     def test_mfc_valve(self):
-        self.target_min_pressure.set(100)
-        self.target_exp_pressure.set(700)
+        self.target_min_pressure.set(100) #20mTorr. Turn on 
+        self.target_exp_pressure.set(700) #Target pressure for experiment, turn off.
         global run_bool 
         run_bool = True
 
