@@ -37,7 +37,7 @@ class Experiment():
         self.isPowerConfigured = Event()
         self.isPressureReading = Event()
         self.isTargetPressure = Event()
-        self.isFeedthroughset
+        self.isFeedthroughset = Event()
         self.isExperimentStarted = Event()
         self.StopALL = Event()
 
@@ -310,7 +310,7 @@ class Experiment():
         
         #_________________Create New Dropdown Options_________________________#
         self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
-        self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough")
+        self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
         self.parent.menubar.fileMenu.add_command(label ="Import Data")
         self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
         self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
@@ -573,11 +573,46 @@ class Experiment():
     def runMFC(self, pressure_lock: Lock):
         pass
 
-    def zeroFeedthrough(self):
-        pass
 
-    def moveFeedthrough(self):
-        pass
+    def moveFeedthrough(self, target):
+        #x is electrode postion * 3200 revolutions
+        print("getting device")
+        dmmName = self.dmm_cbox.get()
+        self.parent.devices[dmmName][1].configureAll()
+        self.configureDMM(dmmName)
+        print("configured")
+        self.Dmm.open_device()
+        print('debug1')
+        self.Dmm.resource.write(':SENS:FUNC "CONT"')
+        print('debug2')
+        ohm = float(self.Dmm.resource.query(":READ?"))
+        print('debug3')
+        with nidaqmx.Task() as do_task:
+            do_task._do_channels.add_do_chan("NI_DAQ/port0/line0")
+            do_task._do_channels.add_do_chan("NI_DAQ/port0/line1")
+            do_task.write([False,True],auto_start=True,timeout=10) 
+            time.sleep(0.5)
+            while ohm > 500:
+                do_task.write([True,True],auto_start=True,timeout=10)
+                time.sleep(.0000025)
+                do_task.write([False,True],auto_start=True,timeout=10)
+                time.sleep(0.0000025)
+                print("Direction Down")
+                ohm = float(self.Dmm.resource.query(":READ?"))
+            #switch direction
+            do_task.write([False,False],auto_start=True,timeout=10) 
+            time.sleep(0.5)
+            for x in np.arange(0,target*3200,1):
+                do_task.write([True,False],auto_start=True,timeout=10)
+                time.sleep(.0000025)
+                do_task.write([False,False],auto_start=True,timeout=10)
+                time.sleep(0.0000025)
+                print("Direction Up")
+                ohm = float(self.Dmm.resource.query(":READ?"))
+        self.Dmm.close_device()
+        print("done")
+
+        
     
     def increase_voltage(self, init_v: int, init_c: int):
         thread = "PWR"
