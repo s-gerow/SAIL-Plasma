@@ -23,10 +23,12 @@ class Experiment():
         self.v_out = None
         self.auto_range = None
 
+        self.DY = 0
+
         #_________________Experiment Data Storage___________________________________#
         self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_Exact(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p)', 'd(d)', 'd(pd)']
         self.experimentOutputDataFrame = pd.DataFrame(columns=self.ExperimentOutputHeader)
-        self.ExperimentRunValues = [] 
+        self.ExperimentRunValues = [[]] 
         self.SaveFileType = None
         self.isSaved = Event()
 
@@ -206,16 +208,18 @@ class Experiment():
         ttk.Spinbox(experimentCondysFrame,
                     from_=-10,
                     to=10,
-                    textvariable=self.plate_pos_var
+                    textvariable=self.plate_pos_var,
+                    state='disabled'
                     ).grid(row=7)
         tk.Label(experimentCondysFrame,
                                 text = "Plate Position").grid(row=6)
         tk.Label(experimentCondysFrame,
                 text = "Electrode Position").grid(row=8)
-        self.electrode_pos_var = tk.StringVar()
+        self.electrode_pos_var = tk.StringVar(value=0)
         ttk.Spinbox(experimentCondysFrame,
                     from_=-10,
                     to=10,
+                    increment=0.5,
                     textvariable=self.electrode_pos_var
                     ).grid(row=9)
 
@@ -329,6 +333,10 @@ class Experiment():
         for i in [self.Dmm, self.Osc, self.Pwr]:
             if isinstance(i, VisaDevice):
                 self.log_message(thread, level, f"Closing {i.name}")
+                if i.name == "Power_TL":
+                    i.open_device()
+                    i.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
+                    i.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
                 i.close_device()
         self.parent.destroy()
 
@@ -402,7 +410,7 @@ class Experiment():
         #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
         self.isDischargeTriggered.clear()
         self.isExperimentStarted.set()
-        
+        self.isFeedthroughset.clear()
         #initilize each object from the dropdown boxes
         oscName = self.osc_cbox.get()
         dmmName = self.dmm_cbox.get()
@@ -420,6 +428,13 @@ class Experiment():
             self.auto_range = "ON"
         else:
             self.auto_range = "OFF"
+        #initilize DMM then zero feedthrough
+        self.Dmm = self.parent.devices[dmmName][0]
+        target_position = float(self.electrode_pos_var.get())
+        setFeedthrough = Thread(target = lambda: self.moveFeedthrough(target_position), daemon= True)
+        setFeedthrough.start()
+        while not self.isFeedthroughset.is_set():
+            time.sleep(1)
         #Initilize threads to configure pyvisa devices
         osccfg = Thread(target = lambda: self.configureOscilloscope(oscName))
         dmmcfg = Thread(target = lambda: self.configureDMM(dmmName))
@@ -434,14 +449,14 @@ class Experiment():
         #print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
         #all previous threads should be done at this point
         #thread starts recording pressure continuouslly until the end of the experiment
-        pressure_lock = Lock() #this is to allow the live_pressure and MFcpressure to access the same variables without hanging the application
+        #pressure_lock = Lock() #this is to allow the live_pressure and MFcpressure to access the same variables without hanging the application
         self.log_message(thread, level, "Starting Continuous Pressure Reading")
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
         #automated feedthrough grounds the nodes and sets to value (wait until done)
-
-        #notification to start pumping to vacuum (10sec)
         
+        #notification to start pumping to vacuum (10sec)
+        print("ready for pressure change")
         #thread monitors pressure to turn on MFC (thread 6)
 
         #thread stops mfc at target pressure. 
@@ -489,7 +504,7 @@ class Experiment():
         thread = "CFG-DMM"
         level = "INFO"
         self.log_message(thread, level, f"configuring{dmmName}")
-        self.Dmm = self.parent.devices[dmmName][0]
+        
         
         self.Dmm.open_device()
         self.Dmm.resource.write("*RST")
@@ -523,7 +538,7 @@ class Experiment():
         self.log_message(thread, level, f"{pwrName} Successfully Confirgured")
         self.isPowerConfigured.set()
 
-    def read_pressure(self, pressure_lock: Lock):
+    def read_pressure(self):
         pressureSensor = DAQDevice("Pressure")
         pressureSensor.task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
         pressureSensor.task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
@@ -532,8 +547,8 @@ class Experiment():
                 pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
                 unfiltered_avg = np.median(pressure_sensor_voltage)
                 true_pressure = 10**(unfiltered_avg - 5)
-                with pressure_lock:
-                    self.parent.after(1, lambda: self.pressure_var.set(true_pressure))
+                #with pressure_lock:
+                self.parent.after(1, lambda: self.pressure_var.set(true_pressure))
                 if(self.isDischargeTriggered.is_set()):
                     self.isDischargeTriggered.pressure = true_pressure
                     self.log_message("Pressure", "INFO", f"Discharge Triggered at {true_pressure} Torr")
@@ -544,6 +559,7 @@ class Experiment():
         thread = "DMM"
         level = "INFO"
         self.Dmm.open_device()
+        #self.Dmm.resource.write(':SENS:FUNC "VOLT:DC"')
         while(self.isExperimentStarted.is_set() & self.isDischargeTriggered.is_set() == False):
             voltage = self.Dmm.resource.query(':READ?')
             self.parent.after(1, lambda: self.voltage_out_var.set(voltage))
@@ -554,6 +570,7 @@ class Experiment():
         
     def readOsc(self):
         self.Osc.open_device()
+        
         while(self.isExperimentStarted.is_set()& self.isDischargeTriggered.is_set() == False):
             VPP = self.Osc.resource.query(f"{self.Osc.options['Channel'][0]}:PARAMETER_VALUE? PKPK")
             if VPP[13:-1] == "****":
@@ -576,17 +593,18 @@ class Experiment():
 
     def moveFeedthrough(self, target):
         #x is electrode postion * 3200 revolutions
-        print("getting device")
-        dmmName = self.dmm_cbox.get()
-        self.parent.devices[dmmName][1].configureAll()
-        self.configureDMM(dmmName)
-        print("configured")
+        thread = 'FDTHR'
+        level = "INFO"
+        self.log_message(thread, level, "Zeroing Feedthrough")
+        
+        #dmmName = self.dmm_cbox.get()
+        #self.auto_range="ON" ##comment out when implemented into regular operation
+        #self.parent.devices[dmmName][1].configureAll()
+        #self.configureDMM(dmmName)
         self.Dmm.open_device()
-        print('debug1')
         self.Dmm.resource.write(':SENS:FUNC "CONT"')
-        print('debug2')
         ohm = float(self.Dmm.resource.query(":READ?"))
-        print('debug3')
+
         with nidaqmx.Task() as do_task:
             do_task._do_channels.add_do_chan("NI_DAQ/port0/line0")
             do_task._do_channels.add_do_chan("NI_DAQ/port0/line1")
@@ -610,8 +628,11 @@ class Experiment():
                 print("Direction Up")
                 ohm = float(self.Dmm.resource.query(":READ?"))
         self.Dmm.close_device()
+        self.isFeedthroughset.set()
         print("done")
 
+    #def feedthrough_active_popup(self):
+    #    popup = 
         
     
     def increase_voltage(self, init_v: int, init_c: int):
@@ -666,11 +687,12 @@ class Experiment():
         time = np.flip(np.array([(tdiv*hgrid)-(idx*time_inter) for idx in range(0,data.size) ]))
 
         voltage_data = np.array([int(code)*(vdiv/25)-offset if int(code) < 127 else (int(code)-256)*(vdiv/25)-offset for code in data])
-
+        
+        self.DY = voltage_data.max()
         self.axes.plot(time, voltage_data)
         self.axes.set_title('Discharge Plot')
-        self.axes.set_ylabel('Voltage')
-        self.axes.set_xlabel('Time')
+        self.axes.set_ylabel('Voltage (V)')
+        self.axes.set_xlabel('Time (s)')
 
         self.figure_canvas.draw()
         self.save_experiment_to_local()
