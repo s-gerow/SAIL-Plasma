@@ -234,7 +234,19 @@ class Experiment():
                     to = 800,
                     textvariable=self.init_pressure
                     ).grid(row=11)
-    
+        
+        #configure button
+        ttk.Button(IOFrame,
+                       text="Configure Experiment",
+                       command=self.run_experiment_configuration).grid(column=3,row=0)
+        experiment_text = (
+                            "This is the procedure for using BeAMED.py to perform automated glow discharges."
+                            "For now this is empty as a test but I will add more in time."
+        )
+        procedure = tk.Text(IOFrame, wrap=tk.WORD, height=25, width=40)
+        procedure.insert(tk.END, experiment_text)
+        procedure.config(state=tk.DISABLED)
+        procedure.grid(columnspan=2,column=3, row=1)
         #_________________Frame for Experiment Control_______________________________#
         experimentControlFrame = tk.Frame(DisplayFrame)
         experimentControlFrame.grid(row=1, column=0)
@@ -315,7 +327,7 @@ class Experiment():
         #_________________Create New Dropdown Options_________________________#
         self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
-        self.parent.menubar.fileMenu.add_command(label ="Import Data")
+        self.parent.menubar.fileMenu.add_command(label ="Import Data", command=self.open_save_file)
         self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
         self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
         self.parent.menubar.fileMenu.add_cascade(label = "Export As...", menu=self.exportMenu)
@@ -395,15 +407,12 @@ class Experiment():
             self.isDischargeTriggered.clear()
             print(self.isDischargeTriggered.is_set())
 
-    def run_experiment(self, event = None):
-        '''This is the main method for the experiment class which is used to start the experiment. All experiment logic should be included 
-        in this method'''
+    def run_experiment_configuration(self):
+        '''This is the first method which configures the experiment. It runs threads to zero the feedthrough, run the MFC and get to target pressure, and configure each device. 
+        This must be done before the experiment start button is clicked'''
         thread = "MAIN"
         level = "INFO"
-        #First check to ensure voltage output is enabled and do not start the experiment if it is disabled
-        if self.v_out_var.get() == "Disable":
-            messagebox.showerror("Experiment Initilization Error", "Voltage Output Diable.\nPlease enable voltage output then try again", icon=messagebox.ERROR)
-            return
+        
         #start the debug log and clear the oscilloscope plot for a new experiment
         self.start_log()
         self.axes.clear()
@@ -446,6 +455,19 @@ class Experiment():
             thread.start()
         for thread in configurationThreads:
             thread.join()
+
+    def run_experiment(self, event = None):
+        thread = "MAIN"
+        level = "INFO"
+        '''This is the main experiment logic. In order to run, all configurations must be complete as declared by an event flag in run_experiment_configuration'''
+        #First check to ensure voltage output is enabled and do not start the experiment if it is disabled
+        if self.v_out_var.get() == "Disable":
+            messagebox.showerror("Experiment Initilization Error", "Voltage Output Disabled.\nPlease enable voltage output then try again", icon=messagebox.ERROR)
+            return
+        for i in [self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set()]:
+            if not i:
+                messagebox.showerror("One or more devices are not configured. Configrue experiment, then run again")
+                return
         #print(self.isDmmConfigured.is_set(), self.isPowerConfigured.is_set(), self.isOscConfigured.is_set())
         #all previous threads should be done at this point
         #thread starts recording pressure continuouslly until the end of the experiment
@@ -453,13 +475,7 @@ class Experiment():
         self.log_message(thread, level, "Starting Continuous Pressure Reading")
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
-        #automated feedthrough grounds the nodes and sets to value (wait until done)
-        
-        #notification to start pumping to vacuum (10sec)
-        print("ready for pressure change")
-        #thread monitors pressure to turn on MFC (thread 6)
-
-        #thread stops mfc at target pressure. 
+    
 
         #thread starts reading DMM
         self.log_message(thread, level, "Starting Continuos Voltage Reading")
@@ -615,7 +631,7 @@ class Experiment():
                 time.sleep(.0000025)
                 do_task.write([False,True],auto_start=True,timeout=10)
                 time.sleep(0.0000025)
-                print("Direction Down")
+                #print("Direction Down")
                 ohm = float(self.Dmm.resource.query(":READ?"))
             #switch direction
             do_task.write([False,False],auto_start=True,timeout=10) 
@@ -625,7 +641,7 @@ class Experiment():
                 time.sleep(.0000025)
                 do_task.write([False,False],auto_start=True,timeout=10)
                 time.sleep(0.0000025)
-                print("Direction Up")
+                #print("Direction Up")
                 ohm = float(self.Dmm.resource.query(":READ?"))
         self.Dmm.close_device()
         self.isFeedthroughset.set()
@@ -701,7 +717,7 @@ class Experiment():
         current_run = ["NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN"]
         dt = datetime.now()
         current_run[0] =  f"{dt.month}/{dt.day}/{dt.year} {dt.hour}:{dt.minute}" #Time is set at end of experiment
-        current_run[1] = "NaN" #Need to find how to get DY from osc
+        current_run[1] = self.DY#" #Need to find how to get DY from osc
         current_run[2] = float(self.PS_voltage_var.get()) #power supply voltage output
         current_run[3] = float(self.voltage_out_var.get()) #read voltage out from dmm
         current_run[4] = float(self.PS_current_var.get()) #power supply current output
@@ -751,7 +767,13 @@ class Experiment():
             self.experimentOutputDataFrame.iloc[0:0]
 
     def open_save_file(self):
-        pass
+        filepath = fd.askopenfilename(title="Open...", filetypes=[("CSV Files", "*.csv"), ("Excel Files", "*.xlxs")])
+        if filepath:
+            if filepath.endswith(".csv"):
+                self.SaveFile.set(os.path.basename(filepath))
+                self.SaveFileType = "CSV"
+            elif filepath.endswith(".xlxs"):
+                messagebox.showwarning("Excel Files Invalid", "Excel Files are currently not supported. Use CSV")
 
     def export_to_csv(self):
         pass

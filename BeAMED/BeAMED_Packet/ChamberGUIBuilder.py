@@ -9,6 +9,7 @@ from tkinter import filedialog as fd
 from tkinter import messagebox
 import time
 from datetime import datetime
+import threading
 from threading import Thread, Event, Lock
 import logging
 import os
@@ -297,7 +298,6 @@ class ExperimentMenu(tk.Menu):
         self.configureListMenu.add_command(label = string, command = lambda: self.master.configure_device(string))
     
     def open_experiment(self):
-        
         filepath = fd.askopenfilename(title="Select Experiment File", 
                                                filetypes=[("Python Files", "*.py")])
         if filepath:
