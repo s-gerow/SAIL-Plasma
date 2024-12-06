@@ -175,6 +175,7 @@ class Experiment():
                 self.Pwr.open_device()
                 self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
                 self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
+                self.Pwr.resource.write("OUTP:STAT:IMM OFF")
                 self.Pwr.close_device()
             if isinstance(self.Dmm, VisaDevice):
                 self.log_message(thread,level, f"Closing {self.Dmm.name}")
@@ -276,7 +277,7 @@ class Experiment():
         init_v = float(self.init_v_var.get())
         init_c = float(self.init_current_var.get())
         v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
-        #v_increase.start()
+        v_increase.start()
         
     def configurePower(self, pwrName):
         thread = "CFG-PWR"
@@ -373,7 +374,7 @@ class Experiment():
         self.Pwr.resource.write("OUTP:STAT:IMM ON")
         voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
-        while(self.StopALL.is_set() == False & float(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?"))<600):
+        while(self.StopALL.is_set() == False & (float(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?"))<600)):
             self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
             self.parent.after(1, lambda: self.PS_voltage_var.set(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             self.parent.after(1, lambda: self.PS_current_var.set(self.Pwr.resource.query("SOUR:CURR:LEV:IMM:AMPL?")))
@@ -381,8 +382,16 @@ class Experiment():
                 self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
                 self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
                 self.log_message(thread, level, f"Stopping DEMO")
+                break
             init_v += voltage_step
             time.sleep(3)
+        if((float(self.Pwer.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")) >= 600) & self.StopALL.is_set() == False):
+            for i in range(15):
+                self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
+                self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
+                if(self.StopALL.is_set()):
+                    break
+                time.sleep(1)
         self.log_message(thread, level, f"Stopping Thread and Voltage Output")
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
@@ -410,7 +419,7 @@ if __name__ == "__main__":
 
     chamber.menubar.load_experiment("./BeAMED/BeAMED_Packet/Demo.py")
     
-    for config in ["Power_TL.config", "Digital_Multimeter.config"]:
+    for config in ["Power_TR.config", "Digital_Multimeter.config"]:
         file = "./BeAMED/BeAMED_Packet/" + config
         chamber.generate_configuration_frame(filepath = file)
 
