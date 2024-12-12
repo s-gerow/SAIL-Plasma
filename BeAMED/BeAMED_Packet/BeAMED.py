@@ -603,8 +603,44 @@ class Experiment():
         self.Osc.close_device()
         time.sleep(5)
 
-    def runMFC(self, pressure_lock: Lock):
-        pass
+    def runMFC(self, target_pressure):
+        pressureSensor = DAQDevice("Pressure")
+        pressureSensor.task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
+        pressureSensor.task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
+        MFC = DAQDevice("MFC")
+        MFC.task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao0", min_val=0,max_val=5)
+        MFC.task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", min_val=0, max_val=5)
+        #get target pressure
+        #set min pressure always 20mTorr
+        min_pressure = 0.020
+        #measure pressure drop until at min pressure
+        pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
+        unfiltered_avg = np.median(pressure_sensor_voltage)
+        true_pressure = 10**(unfiltered_avg - 5)
+        while true_pressure > min_pressure:
+            self.parent.aftter(1, lambda: self.pressure_var.set(true_pressure))
+            pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
+            unfiltered_avg = np.median(pressure_sensor_voltage)
+            true_pressure = 10**(unfiltered_avg - 5)
+            MFC.task.write([[0],[0]],auto_start=True, timeout=10)
+        result = messagebox.showinfo(title="Turn Off Pump", message="Chamber at target minimum pressure, turn off the pump and open the gas tank before clicking okay.")
+        while true_pressure < target_pressure:
+            self.parent.aftter(1, lambda: self.pressure_var.set(true_pressure))
+            pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
+            unfiltered_avg = np.median(pressure_sensor_voltage)
+            true_pressure = 10**(unfiltered_avg - 5)
+            if true_pressure >= target_pressure:
+                MFC.task.write([[0],[0]],auto_start=True, timeout=10)
+                break
+            MFC.task.write([[5],[3]],auto_start=True, timeout=10)
+        if true_pressure >= target_pressure:
+            MFC.task.write([[0],[0]],auto_start=True, timeout=10)
+        #popup notification to turn off pump then hit okay.
+        #turn on mfc
+        #monitor pressure until at target
+        #turn off mfc.
+        #ready to start experiment
+        
 
 
     def moveFeedthrough(self, target):
@@ -646,9 +682,6 @@ class Experiment():
         self.Dmm.close_device()
         self.isFeedthroughset.set()
         print("done")
-
-    #def feedthrough_active_popup(self):
-    #    popup = 
         
     
     def increase_voltage(self, init_v: int, init_c: int):
@@ -798,7 +831,7 @@ if __name__ == "__main__":
 
     chamber.menubar.load_experiment("./BeAMED/BeAMED_Packet/BeAMED.py")
     
-    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
+    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TR.config"]:
         file = "./BeAMED/BeAMED_Packet/" + config
         chamber.generate_configuration_frame(filepath = file)
 
