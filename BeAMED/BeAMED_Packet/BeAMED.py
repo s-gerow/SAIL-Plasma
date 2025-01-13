@@ -327,6 +327,7 @@ class Experiment():
         #_________________Create New Dropdown Options_________________________#
         self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
+        self.parent.menubar.fileMenu.add_command(label = "Set Chamber Pressure", command = Thread(target = lambda: self.runMFC(float(self.init_pressure.get())), daemon=True).start)
         self.parent.menubar.fileMenu.add_command(label ="Import Data", command=self.open_save_file)
         self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
         self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
@@ -342,14 +343,15 @@ class Experiment():
         level = "INFO"
         thread = "MAIN"
         self.log_message(thread, level, f"Quitting Application. Cleaning up loose threads.")
-        for i in [self.Dmm, self.Osc, self.Pwr]:
-            if isinstance(i, VisaDevice):
-                self.log_message(thread, level, f"Closing {i.name}")
-                if i.name == "Power_TL":
-                    i.open_device()
-                    i.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
-                    i.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
-                i.close_device()
+        if len(self.parent.rm.list_opened_resources()) != 0:
+            for i in [self.Dmm, self.Osc, self.Pwr]:
+                if isinstance(i, VisaDevice):
+                    self.log_message(thread, level, f"Closing {i.name}")
+                    if i.name == "Power_TL":
+                        i.open_device()
+                        i.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
+                        i.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
+                    i.close_device()
         self.parent.destroy()
 
 
@@ -612,20 +614,20 @@ class Experiment():
         MFC.task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", min_val=0, max_val=5)
         #get target pressure
         #set min pressure always 20mTorr
-        min_pressure = 0.020
+        min_pressure = 2#0.020
         #measure pressure drop until at min pressure
         pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
         unfiltered_avg = np.median(pressure_sensor_voltage)
         true_pressure = 10**(unfiltered_avg - 5)
         while true_pressure > min_pressure:
-            self.parent.aftter(1, lambda: self.pressure_var.set(true_pressure))
+            self.parent.after(1, lambda: self.pressure_var.set(true_pressure))
             pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
             unfiltered_avg = np.median(pressure_sensor_voltage)
             true_pressure = 10**(unfiltered_avg - 5)
             MFC.task.write([[0],[0]],auto_start=True, timeout=10)
         result = messagebox.showinfo(title="Turn Off Pump", message="Chamber at target minimum pressure, turn off the pump and open the gas tank before clicking okay.")
         while true_pressure < target_pressure:
-            self.parent.aftter(1, lambda: self.pressure_var.set(true_pressure))
+            self.parent.after(1, lambda: self.pressure_var.set(true_pressure))
             pressure_sensor_voltage = np.array(pressureSensor.task.read(100))
             unfiltered_avg = np.median(pressure_sensor_voltage)
             true_pressure = 10**(unfiltered_avg - 5)
@@ -635,6 +637,7 @@ class Experiment():
             MFC.task.write([[5],[3]],auto_start=True, timeout=10)
         if true_pressure >= target_pressure:
             MFC.task.write([[0],[0]],auto_start=True, timeout=10)
+        
         #popup notification to turn off pump then hit okay.
         #turn on mfc
         #monitor pressure until at target
