@@ -240,10 +240,18 @@ class Experiment():
                        text="Configure Experiment",
                        command=self.run_experiment_configuration).grid(column=3,row=0)
         experiment_text = (
-                            "This is the procedure for using BeAMED.py to perform automated glow discharges."
-                            "For now this is empty as a test but I will add more in time."
+                            "This is the procedure for using BeAMED.py to perform automated glow discharges.\n"
+                            "1. Starting with the input settings panel, select the power multimeter, and oscilloscope from the drop down. If you cannot find a device, ensure it is turned on and then select the refresh button.\n"
+                            "2. Despite the appearence of the buttons, the 3 enable buttons to the right of the dropdows are disabled by default, they must be turned on prior to starting the experiment.\n"
+                            "*Note: Power supply output mode buttons do not actually change anything about the experiment.\n"
+                            "3. Set the input voltage to 5~10V below the expected breakdown. Use previous testing data to guage. If there is no known data start at 27V.\n"
+                            "4. Set Current Level to 0.5A\n"
+                            "5. Set the desired electrode distance.\n"
+                            "6. Set the Target Pressure in Torr.\n"
+                            "7. Turn on the power supply connected to the feedthrough to provide the needed 22V\n"
+                            "7. Click Configure Experiment and follow the popup prompts"
         )
-        procedure = tk.Text(IOFrame, wrap=tk.WORD, height=25, width=40)
+        procedure = tk.Text(IOFrame, wrap=tk.WORD, height=25, width=50)
         procedure.insert(tk.END, experiment_text)
         procedure.config(state=tk.DISABLED)
         procedure.grid(columnspan=2,column=3, row=1)
@@ -834,7 +842,7 @@ if __name__ == "__main__":
 
     chamber.menubar.load_experiment("./BeAMED/BeAMED_Packet/BeAMED.py")
     
-    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TR.config"]:
+    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
         file = "./BeAMED/BeAMED_Packet/" + config
         chamber.generate_configuration_frame(filepath = file)
 
