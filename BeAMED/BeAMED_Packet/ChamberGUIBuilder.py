@@ -288,9 +288,11 @@ class ExperimentMenu(tk.Menu):
         self.deviceMenu.add_cascade(label="Remove Device", menu=self.removeListMenu)
         self.deviceMenu.add_cascade(label="Configure Device", menu=self.configureListMenu)
 
+        self.devMenu = tk.Menu(self, tearoff=0)
         # Adding cascades
         self.add_cascade(label="File", menu=self.fileMenu)
         self.add_cascade(label="Devices", menu=self.deviceMenu)
+        self.add_cascade(label="Developer Tools", menu=self.devMenu)
         self.add_cascade(label="Help", menu=helpMenu)
 
     def updateFrames(self, string):

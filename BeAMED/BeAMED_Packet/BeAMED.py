@@ -333,9 +333,13 @@ class Experiment():
         
         
         #_________________Create New Dropdown Options_________________________#
-        self.parent.menubar.fileMenu.add_command(label="Get Plot", command = self.osc_plot)
-        self.parent.menubar.fileMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
-        self.parent.menubar.fileMenu.add_command(label = "Set Chamber Pressure", command = Thread(target = lambda: self.runMFC(float(self.init_pressure.get())), daemon=True).start)
+        
+
+        self.parent.menubar.devMenu.add_command(label = "Test Trigger", command= self.test_trigger_experiment)
+
+        self.parent.menubar.devMenu.add_command(label="Get Plot", command = self.osc_plot)
+        self.parent.menubar.devMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
+        self.parent.menubar.devMenu.add_command(label = "Set Chamber Pressure", command = Thread(target = lambda: self.runMFC(float(self.init_pressure.get())), daemon=True).start)
         self.parent.menubar.fileMenu.add_command(label ="Import Data", command=self.open_save_file)
         self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
         self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
@@ -351,15 +355,14 @@ class Experiment():
         level = "INFO"
         thread = "MAIN"
         self.log_message(thread, level, f"Quitting Application. Cleaning up loose threads.")
-        if len(self.parent.rm.list_opened_resources()) != 0:
-            for i in [self.Dmm, self.Osc, self.Pwr]:
-                if isinstance(i, VisaDevice):
-                    self.log_message(thread, level, f"Closing {i.name}")
-                    if i.name == "Power_TL":
-                        i.open_device()
-                        i.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
-                        i.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
-                    i.close_device()
+        for i in [self.Dmm, self.Osc, self.Pwr]:
+            if isinstance(i, VisaDevice):
+                self.log_message(thread, level, f"Closing {i.name}")
+                if i.name == "Power_TL":
+                    i.open_device()
+                    i.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
+                    i.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
+                i.close_device()
         self.parent.destroy()
 
 
@@ -409,12 +412,14 @@ class Experiment():
     
     def test_trigger_experiment(self):
         '''test method which will trigger the event without external input'''
-        if self.triggered_var.get() == 1:
+        if self.triggered_var.get() == 0:
             self.isDischargeTriggered.set()
+            self.triggered_var.set(1)
             print(self.isDischargeTriggered.is_set())
             self.log_message("MAIN", "INFO", "Discharge Triggered")
         else:
             self.isDischargeTriggered.clear()
+            self.triggered_var.set(0)
             print(self.isDischargeTriggered.is_set())
 
     def run_experiment_configuration(self):
@@ -426,6 +431,7 @@ class Experiment():
         #start the debug log and clear the oscilloscope plot for a new experiment
         self.start_log()
         self.axes.clear()
+        self.triggered_var.set(0)
         #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
         self.isDischargeTriggered.clear()
         self.isExperimentStarted.set()
@@ -605,6 +611,7 @@ class Experiment():
                 VPP_num = float(VPP[13:-2])
             if VPP_num > 0:
                 self.isDischargeTriggered.set()
+                self.triggered_var.set(1)
                 self.Osc.resource.write("STOP")
                 self.log_message("OSC", "INFO", "Discharge Detected")
                 self.osc_plot()
@@ -842,7 +849,7 @@ if __name__ == "__main__":
 
     chamber.menubar.load_experiment("./BeAMED/BeAMED_Packet/BeAMED.py")
     
-    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TL.config"]:
+    for config in ["Oscilloscope.config", "Digital_Multimeter.config", "Power_TR.config"]:
         file = "./BeAMED/BeAMED_Packet/" + config
         chamber.generate_configuration_frame(filepath = file)
 
