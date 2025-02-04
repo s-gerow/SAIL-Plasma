@@ -813,7 +813,7 @@ class Experiment():
             else: return
         elif self.SaveFileType == "CSV":
             filename = self.SaveFile.get()
-            self.experimentOutputDataFrame.to_csv(filename, mode = 'a', header= False, index = False)
+            self.experimentOutputDataFrame.to_csv(filename, mode = 'w', index = False)
             self.isSaved.set()
             self.experimentOutputDataFrame.iloc[0:0]
 
@@ -823,6 +823,9 @@ class Experiment():
             if filepath.endswith(".csv"):
                 self.SaveFile.set(os.path.basename(filepath))
                 self.SaveFileType = "CSV"
+                old_data = pd.read_csv(filepath)
+                self.experimentOutputDataFrame = pd.concat([old_data, self.experimentOutputDataFrame])
+                print(self.experimentOutputDataFrame)
             elif filepath.endswith(".xlxs"):
                 messagebox.showwarning("Excel Files Invalid", "Excel Files are currently not supported. Use CSV")
 
