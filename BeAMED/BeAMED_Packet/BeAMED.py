@@ -667,10 +667,12 @@ class Experiment():
         level = "INFO"
         self.log_message(thread, level, "Zeroing Feedthrough")
         
-        #dmmName = self.dmm_cbox.get()
-        #self.auto_range="ON" ##comment out when implemented into regular operation
-        #self.parent.devices[dmmName][1].configureAll()
-        #self.configureDMM(dmmName)
+        
+        #feedthrough_toplevel = tk.Toplevel(self.parent, text = "Zeroing Feedthrough...\n Please Wait")
+        #feedthrough_toplevel.geometry("180x100")
+        #feedthrough_toplevel.title("Zeroing Feedthrough")
+
+        
         self.Dmm.open_device()
         self.Dmm.resource.write(':SENS:FUNC "CONT"')
         ohm = float(self.Dmm.resource.query(":READ?"))
@@ -755,7 +757,7 @@ class Experiment():
 
         voltage_data = np.array([int(code)*(vdiv/25)-offset if int(code) < 127 else (int(code)-256)*(vdiv/25)-offset for code in data])
         
-        self.DY = voltage_data.max()
+        self.DY = voltage_data[5:].max()
         self.axes.plot(time, voltage_data)
         self.axes.set_title('Discharge Plot')
         self.axes.set_ylabel('Voltage (V)')
@@ -838,6 +840,7 @@ class Experiment():
     def open_export_panel(self):
         pass
 
+    
 
         
 
