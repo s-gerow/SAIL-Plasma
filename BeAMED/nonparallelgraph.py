@@ -61,9 +61,9 @@ ax3.view_init(elev=25, azim=25, roll=0)
 
 ax2 = fig.add_subplot(111)
 ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(0.1)), 'b', label = "~0 degrees")
-ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(10)), 'orange', label = '15 degrees')
-#ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(5)), 'green', label = '5 degrees')
-#ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(2.5)), 'pink', label = '2.5 degrees' )
+ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(45)), 'orange', label = '15 degrees')
+ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(60)), 'green', label = '5 degrees')
+ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(90)), 'pink', label = '2.5 degrees' )
 ax2.plot(np.log10(pd), np.log10(Vcr_parallel), 'r.', label = 'parallel')
 
 ax2.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
