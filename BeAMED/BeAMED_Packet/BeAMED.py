@@ -372,7 +372,6 @@ class Experiment():
             btn.configure(text='T: Enable')
         elif var.get() == "Disable":
             btn.configure(text='F: Disable')
-
     
     def start_log(self):
         '''start_log() initlizes the logger into a file called debug.log which will record events for the experiment'''
