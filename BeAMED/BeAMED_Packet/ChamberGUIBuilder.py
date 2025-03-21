@@ -1,4 +1,13 @@
+#---------------------------------------------------#
+# File: ChamberGUIBuilder.py
+# Author: Seth Gerow 
+# Date: 3/20/2024 (Last Edited)
+# This file is the base file that is being used to build experiment GUI's in AMPS@SAIL at Embry-Riddle Aeronautical University
+# The purpose of this file is to create the foundation of a GUI that can be built on for specific experiment functions
+#---------------------------------------------------#
+
 #import system default packages
+#some of these are not used by the GUI Builder but are often used by the sub-experiments
 import sys
 import subprocess
 import importlib.metadata
@@ -56,14 +65,17 @@ class VisaDevice(pyvisa.resources.Resource):
         self.rm = rm
     
     def configure(self):
+        '''VisaDevice.configure() prints the configurations stored in the dictionary'''
         print("configured")
         for config, value in self.options.items():
             print(f"config: {config} | value: {value[0]} | range: {value[1]}")
 
     def setConfiguration(self, config_name, value):
+        '''VisaDevice.setConfiguration(config_name, value) changes the value of a given configuration which already exists to the parameter value'''
         self.options[config_name][0] = value
 
     def new_configurations(self, config_file: str):
+        '''VisaDevice.new_configurations uses a configuration text file of the correct format to set the configuration options attribute to the given settings.'''
         with open(config_file, 'r') as f:
             for i, row in enumerate(csv.reader(f,delimiter='\t')):
                 if i == 0:

@@ -7,10 +7,14 @@ class Experiment():
         parent.protocol('WM_DELETE_WINDOW', lambda: self.clean_exit()) 
         #The lambda: function allows the return of this function to be returned "implicitely", 
         #ie. self.clean_exit() will not be traditionally called until the root protocol is met
+        #the purpose of the above program is to override the 'X' button so that when it is clicked, the program stops voltage output, properly disconnects from resources, and cancels
+        #running scripts to prevent hanging threads which cause problems at close
+
         #_________________Attributes of Experiment__________________________________#
             #The parent attribute represents the ChamberApp which is needed to import this experiment
             #The logger is the custom debug logger I built to output errors and information as the experiment runs
             #The rm is the resource manager which comes from the parent and is used in pyvisa to communicate with devices
+            #   rm needs to be initlizied which happens when devices are configured through the 
             #Dmm,Osc/Pwr are None-objects at start until they are properly imported, these attributes should be a pyvisa-object from ChamberApp.py
             #cont_acq, v_out, auto_range are variables to store the value of the associated buttons to initlize experiment
         self.parent = parent
