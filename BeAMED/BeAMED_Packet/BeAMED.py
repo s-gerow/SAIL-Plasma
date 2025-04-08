@@ -26,6 +26,7 @@ class Experiment():
         self.cont_acq = None
         self.v_out = None
         self.auto_range = None
+        
 
         self.DY = 0
 
@@ -369,7 +370,6 @@ class Experiment():
                 i.close_device()
         self.parent.destroy()
 
-
     def toggle_check_btn(self, btn, var):
         '''toggle_check_btn allows the check buttons to change their text when they are activated by clicking'''
         if var.get() == "Enable":
@@ -510,9 +510,6 @@ class Experiment():
         v_increase.start()
         #all threads stop action and send values to excel sheet
         
-
-    
-
     def configureOscilloscope(self, oscName):
         thread = "CFG-OSC"
         level = "INFO"
@@ -662,8 +659,6 @@ class Experiment():
         #turn off mfc.
         #ready to start experiment
         
-
-
     def moveFeedthrough(self, target):
         #x is electrode postion * 3200 revolutions
         thread = 'FDTHR'
@@ -706,7 +701,6 @@ class Experiment():
         self.isFeedthroughset.set()
         print("done")
         
-    
     def increase_voltage(self, init_v: int, init_c: int):
         thread = "PWR"
         level = "INFO"
