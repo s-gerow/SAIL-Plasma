@@ -17,7 +17,7 @@ import numpy as np
 
 
 def clean_exit(self):
-    self.rm.close()
+    self.read_bool = False
     self.destroy()
 
 class pressure_gui(tk.Tk):
@@ -26,48 +26,79 @@ class pressure_gui(tk.Tk):
 
         self.geometry('300x500')
         self.title("Pressure Sensor Configuration")
-        self.protocol('WM_DELETE_WINDOW', lambda: clean_exit(self)) 
+        self.protocol('WM_DELETE_WINDOW', lambda: clean_exit(self))
+
+        self.read_bool = False
 
         #Matplotlib Config
         matplotlib.use('TkAgg')
 
         #Initialize Visa Resource Manager
-        self.rm = pyvisa.ResourceManager()
 
-        self.pressure = tk.IntVar()
-        self.target_min_pressure = tk.IntVar()
-        self.target_exp_pressure = tk.IntVar()
+        self.old_pressure = tk.IntVar()
+        self.new_pressure = tk.IntVar()
+        self.new_voltage = tk.IntVar()
 
-        pressure_label = tk.Label(self, text="Pressure").pack(anchor='w')
-        pressure_box = tk.Spinbox(self,
-                                  textvariable=self.pressure,
+        self.pressure_min = 0.11 #Torr
+        self.pressure_max = 10 #Torr
+
+        old_pressure_label = tk.Label(self, text="Old Pressure Sensor").pack(anchor='w')
+        old_pressure_box = tk.Spinbox(self,
+                                  textvariable=self.old_pressure,
                                 from_=0,
                                 to=1000,)
-        pressure_box.pack(anchor='e')
-        target_min_label = tk.Label(self, text="Target Minimum Pressure").pack(anchor='w')
-        target_min_pressure_box = tk.Spinbox(self, textvariable=self.target_min_pressure,
+        old_pressure_box.pack(anchor='e')
+        new_pressure_label = tk.Label(self, text="New Pressure Sensor").pack(anchor='w')
+        new_pressure_box = tk.Spinbox(self,
+                                  textvariable=self.new_pressure,
                                 from_=0,
                                 to=1000,)
-        target_min_pressure_box.pack(anchor='e')
-        target_exp_label = tk.Label(self, text="Target Experiment Pressure").pack(anchor="w")
-        target_exp_pressure_box = tk.Spinbox(self, textvariable=self.target_exp_pressure,
+        new_pressure_box.pack(anchor='e')
+        new_pressure_V_label = tk.Label(self, text="New Pressure Sensor Voltage Output").pack(anchor='w')
+        new_voltage_box = tk.Spinbox(self,
+                                  textvariable=self.new_voltage,
                                 from_=0,
-                                to=1000,)
-        target_exp_pressure_box.pack(anchor='e')
+                                to=10,)
+        new_voltage_box.pack(anchor='e')
+
+        start_read = tk.Button(self, text="Start Reading", command=self.start_pressure)
+        start_read.pack(anchor='w')
+
+        end_read = tk.Button(self, text="Stop Reading", command=self.stop_pressure)
+        end_read.pack(anchor='w')
+        
 
 
     
     def read_pressure(self):
-        with nidaqmx.Task() as read:
-            ai_channel = read.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=1, max_val=8, terminal_config=TerminalConfiguration.RSE)
-            read.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
+        with nidaqmx.Task() as task:
+            task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", min_val=0, max_val=10, terminal_config=TerminalConfiguration.DIFF)
+            task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai1", min_val=0, max_val=10, terminal_config=TerminalConfiguration.DIFF)
+
+            task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=AcquisitionType.FINITE, samps_per_chan=100)
             
-            while True:
-                pressure_sensor_voltage = np.array(read.read(100))
-                unfiltered_avg = np.median(pressure_sensor_voltage)
-                true_pressure = 10**(unfiltered_avg - 5)
-                self.after(1, lambda: self.pressure.set(true_pressure))
-        
+            while self.read_bool:
+                pressure_sensor_voltage = np.array(task.read(100))
+                old_pressure_unfiltered_avg = np.median(pressure_sensor_voltage[0])
+                new_pressure_unfiltered_avg = np.median(pressure_sensor_voltage[1])
+                old_true_pressure = 10**(old_pressure_unfiltered_avg - 5)
+                new_true_pressure = (new_pressure_unfiltered_avg/10)*(self.pressure_max-self.pressure_min)+self.pressure_min
+                self.after(1, lambda: self.old_pressure.set(old_true_pressure))
+                self.after(1, lambda: self.new_voltage.set(new_pressure_unfiltered_avg))
+                self.after(1, lambda: self.new_pressure.set(new_true_pressure))
+            
+
+
+    def start_pressure(self):
+        self.read_bool = True
+        pressure_thread = Thread(target=self.read_pressure, daemon=True)
+
+        pressure_thread.start()
+
+
+    def stop_pressure(self):
+        self.read_bool = False
+
     def test_mfc_valve(self):
         self.target_min_pressure.set(2) #20mTorr. Turn on 
         self.target_exp_pressure.set(6) #Target pressure for experiment, turn off.
@@ -122,5 +153,4 @@ class pressure_gui(tk.Tk):
 
 if __name__ == "__main__":
     pressure = pressure_gui()
-    pressure.test_run()
     pressure.mainloop()
