@@ -11,6 +11,8 @@ class Experiment():
 
         self.do_task = None
         self.ao_task = None
+        self.ai_task = None
+        self.di_task = None
 
         self.DAQ_Frame = tk.Frame(self.parent.experimentFrame, width=550, height = 450, relief='sunken')
         self.DAQ_Frame.grid(column=0, row=0, sticky = 'nw')
@@ -137,6 +139,38 @@ class Experiment():
             valve_rb = tk.Checkbutton(valve_opt_frame, text=f"Valve {i+1}", variable=self.valve_selected_var[i], command = lambda idx=i: self.on_valve_check(idx))
             valve_rb.grid(row=2,column=i)
 
+        self.pin_monitor_frame = tk.LabelFrame(self.parent.experimentFrame, relief='sunken', text='Pin Maintenence Frame')
+        self.pin_monitor_frame.grid(column=1, row=0, rowspan=3,sticky='nsew')
+        tk.Button(self.pin_monitor_frame, text="Add Pin", command=self.add_pin_monitor).pack()
+        self.pin_frames = {'Pin ID', ('Pin Frame', 'Pin Index')}
+
+    class PinFrame(tk.LabelFrame):
+        def __init__(self, parent, experiment, pin_id = None, relief = None, pin_type = None):
+            self.experiment = experiment
+            super().__init__(parent, text=pin_id, relief=relief)
+            self.pin_id = tk.StringVar(pin_id)
+            self.pin_type = tk.StringVar(pin_type)
+            self.pin_value_options = {'do': self.experiment.enabled_do_channels,
+                                      'di': self.experiment.enabled_di_channels,
+                                      'ao': self.experiment.enabled_ao_channels,
+                                      'ai': self.experiment.enabled_ai_channels,
+                                      '': ['no type selected']
+            }
+            self.pin_type_cbox = ttk.Combobox(self, textvariable=self.pin_type, values=['do', 'di', 'ao', 'ai'])
+            self.pin_type_cbox.pack(anchor='n')
+            self.pin_id_cbox = ttk.Combobox(self, textvariable=self.pin_id, values=self.pin_value_options[self.pin_type.get()])
+            self.pin_id_cbox.pack()
+            tk.Button(self, text='delete', command=self.destroy).pack(anchor='w')
+            tk.Button(self, text = 'refresh', command=self.refresh_enabled_pins).pack(anchor='e')
+
+        def refresh_enabled_pins(self):
+            self.pin_id_cbox['values'] = self.pin_value_options[self.pin_type.get()]
+    def add_pin_monitor(self):
+        frame = self.PinFrame(self.pin_monitor_frame, experiment=self)
+        frame.pack()
+        
+
+
     def on_valve_check(self, idx):
         if self.pwr_voltage.get() < 26.8:
             self.valve_selected_var[idx].set(False)
@@ -160,10 +194,6 @@ class Experiment():
             chan_index = self.daq_line_labels.index(chan_name)
             self.output_bool_vars[chan_index].set(False)
 
-            
-
-
-
     def clean_exit(self):
         '''clean_exit() is used by the parent menu to intercept the "X' button at the top right and ensure that all 
         threads and open processes are closed before the UI quits'''
@@ -174,8 +204,9 @@ class Experiment():
                 self.PWR.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
                 self.PWR.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
             self.PWR.close_device()
-        if isinstance(self.do_task, nidaqmx.Task):
-                self.do_task.close()
+        for task in (self.do_task, self.ao_task, self.di_task, self.ai_task):
+            if isinstance(task, nidaqmx.Task):
+                    task.close()
         self.experiment_online.clear()
         self.parent.destroy()
 
@@ -238,7 +269,7 @@ class Experiment():
                      
     def daq_do_output(self):
         output_bool_list = [False for _ in range(len(self.enabled_do_channels))]
-        for j in range(16,21):
+        for j in range(16,28):
             chan_name = self.daq_line_labels[j]
             try:
                 enabled_index = self.enabled_do_channels.index(chan_name)
@@ -257,11 +288,24 @@ class Experiment():
         if self.enable_var[i].get() == False:
             self.output_bool_vars[i].set(0)
             print(f"{self.daq_line_labels[i]} disabled")
-            self.daq_do_output()
-            self.enabled_do_channels.remove(self.daq_line_labels[i])
+            if i in range(16,28):
+                #do output/input pins
+                self.daq_do_output()
+                self.enabled_do_channels.remove(self.daq_line_labels[i])
+            elif i in range(13,15):
+                self.enabled_ao_channels.remove(self.daq_line_labels[i])
+            elif i in range(0,13):
+                self.enabled_ai_channels.remove(self.daq_line_labels[i])
         elif self.enable_var[i].get() == True:
             print(f"{self.daq_line_labels[i]} enabled")
-            self.enabled_do_channels.append(self.daq_line_labels[i])
+            if i in range(16,28):
+                #do output/input pins
+                self.enabled_do_channels.append(self.daq_line_labels[i])
+            elif i in range(13,15):
+                self.enabled_ao_channels.append(self.daq_line_labels[i])
+            elif i in range(0,13):
+                self.enabled_ai_channels.append(self.daq_line_labels[i])
+            
         if i > 15:
             if isinstance(self.do_task, nidaqmx.Task):
                 self.do_task.close()
@@ -269,6 +313,20 @@ class Experiment():
             for chan in self.enabled_do_channels:
                 self.do_task._do_channels.add_do_chan("NI_DAQ"+chan)
             print(self.do_task.do_channels.channel_names)
+        elif i < 12:
+            if isinstance(self.ai_task, nidaqmx.Task):
+                self.ai_task.close()
+            self.ai_task = nidaqmx.Task()
+            for chan in self.enabled_ai_channels:
+                self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ"+chan)
+            print(self.ai_task.ai_channels.channel_names)
+        elif i in range(13,15):
+            if isinstance(self.ao_task, nidaqmx.Task):
+                self.ao_task.close()
+            self.ao_task = nidaqmx.Task()
+            for chan in self.enabled_ao_channels:
+                self.ao_task.ao_channels.add_ao_voltage_chan("NI_DAQ"+chan)
+            print(self.ao_task.ao_channels.channel_names)
     
     def set_pwr_output(self):
         if self.pwr_configured_var.get() == True:
