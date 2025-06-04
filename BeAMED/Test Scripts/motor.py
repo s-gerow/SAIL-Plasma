@@ -66,10 +66,10 @@ def run():
     DMM.write(':SENS:FUNC "CONT"')
     DMM.write('TRAC:FILL:MODE CONT,"defbuffer1"') #continuous fill
     with nidaqmx.Task() as do_task:
-        Pull = do_task._do_channels.add_do_chan("NI_DAQ/port0/line0")
-        Dir = do_task._do_channels.add_do_chan("NI_DAQ/port0/line1")
+        Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
+        Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line3")
 
-        while run:
+        while run_bool:
             ohm = float(DMM.query(":READ?"))
             if ohm < 500: #Move down
                 DMM.close()
@@ -89,12 +89,12 @@ def run():
                 '''
             else:       #Move down
                 
-                do_task.write([False,True],auto_start=True,timeout=10) 
+                #do_task.write([True,False],auto_start=True,timeout=10) 
                 sleep(0.5)
                 for x in range(3200):
-                    do_task.write([True,True],auto_start=True,timeout=10)
+                    do_task.write([True,False],auto_start=True,timeout=10)
                     sleep(.0000025)
-                    do_task.write([False,True],auto_start=True,timeout=10)
+                    do_task.write([False,False],auto_start=True,timeout=10)
                     sleep(0.0000025)
                     print("Direction Down")
                     ohm = float(DMM.query(":READ?"))

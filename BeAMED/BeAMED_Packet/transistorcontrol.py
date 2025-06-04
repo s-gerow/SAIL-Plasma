@@ -1,3 +1,5 @@
+import nidaqmx.constants
+import nidaqmx.constants
 from ChamberGUIBuilder import *
 
 class Experiment():
@@ -13,6 +15,9 @@ class Experiment():
         self.ao_task = None
         self.ai_task = None
         self.di_task = None
+
+        self.pressure_min = 0.11 #Torr #MKS Sensor
+        self.pressure_max = 10 #Torr #MKS Sensor
 
         self.DAQ_Frame = tk.Frame(self.parent.experimentFrame, width=550, height = 450, relief='sunken')
         self.DAQ_Frame.grid(column=0, row=0, sticky = 'nw')
@@ -150,21 +155,34 @@ class Experiment():
             super().__init__(parent, text=pin_id, relief=relief)
             self.pin_id = tk.StringVar(pin_id)
             self.pin_type = tk.StringVar(pin_type)
+            self.pin_option = None
             self.pin_value_options = {'do': self.experiment.enabled_do_channels,
                                       'di': self.experiment.enabled_di_channels,
                                       'ao': self.experiment.enabled_ao_channels,
                                       'ai': self.experiment.enabled_ai_channels,
                                       '': ['no type selected']
             }
+            self.output_options = {'do': [nidaqmx.constants.DigitalDriveType.ACTIVE_DRIVE, nidaqmx.constants.DigitalDriveType.OPEN_COLLECTOR],
+                                   'ai': [nidaqmx.constants.TerminalConfiguration.DIFF, nidaqmx.constants.TerminalConfiguration.RSE],
+                                   '': ['no type selected']                 
+            }
             self.pin_type_cbox = ttk.Combobox(self, textvariable=self.pin_type, values=['do', 'di', 'ao', 'ai'])
-            self.pin_type_cbox.pack(anchor='n')
+            self.pin_type_cbox.grid(row = 0, column=0)
             self.pin_id_cbox = ttk.Combobox(self, textvariable=self.pin_id, values=self.pin_value_options[self.pin_type.get()])
-            self.pin_id_cbox.pack()
-            tk.Button(self, text='delete', command=self.destroy).pack(anchor='w')
-            tk.Button(self, text = 'refresh', command=self.refresh_enabled_pins).pack(anchor='e')
+            self.pin_id_cbox.grid(row=0, column=1)
+            self.output_type_cbox = ttk.Combobox(self, textvariable=self.pin_option, values = self.output_options[self.pin_type.get()])
+            self.output_type_cbox.grid(row=0, column=2)
+            tk.Button(self, text='delete', command=self.destroy).grid(row=1,column=0, sticky='w')
+            tk.Button(self, text = 'refresh', command=self.refresh_enabled_pins).grid(row=1, column=1, sticky='e')
+            tk.Button(self, text = 'refresh', command=self.refresh_output_options).grid(row=1, column=2, sticky='e')
 
         def refresh_enabled_pins(self):
             self.pin_id_cbox['values'] = self.pin_value_options[self.pin_type.get()]
+
+        def refresh_output_options(self):
+            self.output_type_cbox['values'] = self.output_options[self.pin_type.get()]
+
+
     def add_pin_monitor(self):
         frame = self.PinFrame(self.pin_monitor_frame, experiment=self)
         frame.pack()
@@ -257,7 +275,7 @@ class Experiment():
         else:
             self.parent.generate_configuration_frame(filename= cbox_name.get())
     
-    def pin_output(self, i):
+    def pin_output(self, i, voltage=0, return_box_array= {}):
         
         print(self.output_bool_vars[i].get())
         if self.enable_var[i].get() == False:
@@ -266,7 +284,32 @@ class Experiment():
         else:
             if i > 15:
                 self.daq_do_output()
-                     
+            elif i in range(12,14):
+                self.daq_ao_output(voltage=voltage)
+            elif i in range(0,12):
+                self.daq_ai_input(return_box_array)
+
+    def daq_ai_input(self, return_box_array):
+        pass
+
+
+    def daq_ao_output(self, voltage):
+        #can only output one channel at a time due to limitations in my current desire to do this
+        output_bool_list = [0 for _ in range(len(self.enabled_ao_channels))]
+        for j in range(13, 15):
+            chan_name = self.daq_line_labels[j]
+            try:
+                enabled_index = self.enabled_ao_channels.index(chan_name)
+                if self.output_bool_vars.get() == 1:
+                    output_bool_list[enabled_index]=voltage
+                elif self.output_bool_vars.get() ==0:
+                    pass
+            except ValueError:
+                pass
+        self.ao_task.write(output_bool_list, auto_start=True, timeout=3)
+
+    
+
     def daq_do_output(self):
         output_bool_list = [False for _ in range(len(self.enabled_do_channels))]
         for j in range(16,28):
@@ -284,7 +327,7 @@ class Experiment():
         #print(output_bool_list)
         self.do_task.write(output_bool_list, auto_start=True, timeout=3)
 
-    def pin_enable(self, i):
+    def pin_enable(self, i, input_type = nidaqmx.constants.TerminalConfiguration.RSE):
         if self.enable_var[i].get() == False:
             self.output_bool_vars[i].set(0)
             print(f"{self.daq_line_labels[i]} disabled")
@@ -318,7 +361,7 @@ class Experiment():
                 self.ai_task.close()
             self.ai_task = nidaqmx.Task()
             for chan in self.enabled_ai_channels:
-                self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ"+chan)
+                self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ"+chan, terminal_config=input_type)
             print(self.ai_task.ai_channels.channel_names)
         elif i in range(13,15):
             if isinstance(self.ao_task, nidaqmx.Task):
