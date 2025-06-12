@@ -64,7 +64,7 @@ class Experiment():
         self.isTargetPressure = Event() #this is cleared at the beginning of the experiment trial and set when the setpressure fucntion is finished
         self.isFeedthroughset = Event() #this is cleared at the begining of the experiment trial and set when the feedthrough function finishes
         self.isExperimentStarted = Event() #when a new experimental trial is started this is set
-        self.isDischargeSaved = Event() 
+        self.isDischargeSaved = Event()
         self.isSaved = Event() #this is used to manage the experimental flow. Once a discharge is compelete, the system collects the data and saves it. Only then can a new test start.
         self.StopALL = Event()
 
@@ -84,11 +84,11 @@ class Experiment():
                 else:
                     print("Event not triggered")
         self.isDischargeTriggered = experimentEvent()
-        
+
         #***************************************************************************#
         #All sections here until the end of the __init__ method are specfically formating frames and widgets for user input.
-        #If you need to access any of this information, a tkinter variable will be named "self.var_name". This variable is how you access 
-        #the data from these inputs. If you want to add a new feild you do not need to label the label, input box, and variable with "self.", 
+        #If you need to access any of this information, a tkinter variable will be named "self.var_name". This variable is how you access
+        #the data from these inputs. If you want to add a new feild you do not need to label the label, input box, and variable with "self.",
         #only the variable.
         #_________________Configure Experiment Frame________________________________#
             #Splits the Experiment Frame of the Chamber app into two frames for input and output
@@ -108,19 +108,19 @@ class Experiment():
         
         tk.Label(device_opt_frame, text = 'VISA Power').grid(row=0, column=0)
         self.pwr_cbox = ttk.Combobox(device_opt_frame, state = 'readonly', values = self.check_IO())
-        self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(event, self.pwr_cbox))
+        self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.pwr_cbox))
         self.pwr_cbox.grid(row =0, column=1)
         
         tk.Label(device_opt_frame, text = 'VISA DMM').grid(row=1,column=0)
         self.dmm_cbox = ttk.Combobox(device_opt_frame, state = 'readonly', values = self.check_IO())
-        self.dmm_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(event, self.dmm_cbox))
+        self.dmm_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.dmm_cbox))
         self.dmm_cbox.grid(row=1,column=1)
 
         tk.Label(device_opt_frame, text = 'VISA O-Scope').grid(row=2,column=0)
         self.osc_cbox = ttk.Combobox(device_opt_frame, state = 'readonly', values = self.check_IO())
-        self.osc_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(event, self.osc_cbox))
+        self.osc_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.osc_cbox))
         self.osc_cbox.grid(row=2,column=1)
-        
+
         #_________________Frame for CheckBox Settings at Experiment Startup_________#
             #Frame holding checkboxes for configurations
         enabledisable_frame = tk.Frame(IOFrame)
@@ -153,12 +153,12 @@ class Experiment():
         
         self.auto_range_var = tk.StringVar(value = "Disable")
         tk.Label(enabledisable_frame, text = 'Auto Range DMM (T: Enable)').grid(row=2 )
-        self.auto_button = tk.Checkbutton(enabledisable_frame, 
+        self.auto_button = tk.Checkbutton(enabledisable_frame,
                                     text = 'T: Enable',
                                     variable=self.auto_range_var,
-                                    image = self.false_image, 
-                                    selectimage = self.true_image, 
-                                    indicatoron = False, 
+                                    image = self.false_image,
+                                    selectimage = self.true_image,
+                                    indicatoron = False,
                                     compound= 'left',
                                     onvalue="Enable",
                                     offvalue="Disable",
@@ -167,11 +167,11 @@ class Experiment():
         
         self.v_out_var = tk.StringVar(value = "Disable")
         tk.Label(enabledisable_frame, text = 'Enable V-Output Power (T: Enable)').grid(row=4 )
-        self.vout_button = tk.Checkbutton(enabledisable_frame, 
+        self.vout_button = tk.Checkbutton(enabledisable_frame,
                                 text = 'T:Enable',
-                                image = self.false_image, 
-                                selectimage = self.true_image, 
-                                indicatoron = False, 
+                                image = self.false_image,
+                                selectimage = self.true_image,
+                                indicatoron = False,
                                 compound= 'left',
                                 variable = self.v_out_var,
                                 onvalue="Enable",
@@ -181,26 +181,26 @@ class Experiment():
 
         tk.Label(enabledisable_frame, text = 'Power Supply Output Mode', font = ('Times New Roman', 14, 'bold')).grid(row=6 )
         self.cv_var = tk.IntVar()
-        tk.Checkbutton(enabledisable_frame, 
-                                text = "CV Mode", 
-                                image = self.false_image, 
-                                selectimage = self.true_image, 
-                                indicatoron = False, 
+        tk.Checkbutton(enabledisable_frame,
+                                text = "CV Mode",
+                                image = self.false_image,
+                                selectimage = self.true_image,
+                                indicatoron = False,
                                 compound= 'left',
-                                onvalue = 1, 
+                                onvalue = 1,
                                 offvalue = 0,
                                 variable = self.cv_var).grid(row=7)
         self.cc_var = tk.IntVar()
-        tk.Checkbutton(enabledisable_frame, 
-                                text = "CC Mode", 
+        tk.Checkbutton(enabledisable_frame,
+                                text = "CC Mode",
                                 image = self.false_image,
-                                selectimage = self.true_image, 
-                                indicatoron = False, 
+                                selectimage = self.true_image,
+                                indicatoron = False,
                                 compound ='left',
-                                onvalue = 1, 
+                                onvalue = 1,
                                 offvalue = 0,
                                 variable = self.cc_var).grid(row=8)
-        
+
         #_________________Frame for Experiment Condition Settings___________________#
         experimentCondysFrame = tk.Frame(IOFrame)
         experimentCondysFrame.grid(row=0, column=2)
@@ -288,9 +288,7 @@ class Experiment():
         tk.Spinbox(experimentCondysFrame,
                     textvariable=self.gas_type
                     ).grid(column=1, row=8)
-        
 
-        
         #configure button
         ttk.Button(IOFrame,
                        text="Configure Experiment",
@@ -309,7 +307,7 @@ class Experiment():
                             "9. Click Configure Experiment and follow the popup prompts\n"
                             "*Warning: The system is automated but you still need to monitor it, if any exceptions arise in the terminal or if you notice any unexpected behavior, first click the STOP button and then turn off all power."
         )
-        procedure = tk.Text(IOFrame, wrap=tk.WORD, height=25, width=70)
+        procedure = tk.Text(IOFrame, wrap=tk.WORD, height=27, width=70)
         procedure.insert(tk.END, experiment_text)
         procedure.config(state=tk.DISABLED)
         procedure.grid(columnspan=2,column=0, row=1)
@@ -325,17 +323,16 @@ class Experiment():
         self.triggered_var = tk.IntVar()
         tk.Label(experimentControlFrame,
                     text = "Triggered\nEvent").grid(row=3)
-        tk.Checkbutton(experimentControlFrame, 
-                        text = "Event Triggered?", 
-                        image = self.trig_false_image, 
-                        selectimage = self.trig_true_image, 
-                        indicatoron = False, 
-                        onvalue = 1, 
-                        offvalue = 0, 
+        tk.Checkbutton(experimentControlFrame,
+                        text = "Event Triggered?",
+                        image = self.trig_false_image,
+                        selectimage = self.trig_true_image,
+                        indicatoron = False,
+                        onvalue = 1,
+                        offvalue = 0,
                         command = lambda: self.test_trigger_experiment(),
                         variable = self.triggered_var).grid(row=4)
 
-        
         #_________________Frame for Experiment Output Graph_________________________#
         experimentGraphFrame = tk.Frame(DisplayFrame)
         experimentGraphFrame.grid(row=0, columnspan=2)
@@ -404,12 +401,11 @@ class Experiment():
         
         tk.Label(experimentOutputFrame, text="Save to:").grid(column=2, row=0)
         self.SaveFile = tk.StringVar()
-        self.saveOptionBox = tk.Spinbox(experimentOutputFrame, state='readonly', textvariable=self.SaveFile).grid(row=0, column=4)
-        
-        
+        tk.Spinbox(experimentOutputFrame, state='readonly', textvariable=self.SaveFile).grid(row=0, column=4)
+
+
         #_________________Create New Dropdown Options_________________________#
         self.parent.menubar.devMenu.add_command(label = "Test Trigger", command= self.test_trigger_experiment)
-
         self.parent.menubar.devMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.devMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
         self.parent.menubar.devMenu.add_command(label= "Read Pressure", command = Thread(target=lambda: self.read_pressure(), daemon=True).start)
@@ -422,7 +418,7 @@ class Experiment():
         self.exportMenu.add_command(label = "CSV")
         self.parent.menubar.fileMenu.add_separator()
         self.parent.menubar.fileMenu.add_command(label="Exit", command = self.clean_exit)
-        
+
     def clean_exit(self):
         '''clean_exit() is used by the parent menu to intercept the "X' button at the top right and ensure that all 
         threads and open processes are closed before the UI quits'''
@@ -465,7 +461,7 @@ class Experiment():
             btn.configure(text='T: Enable')
         elif var.get() == "Disable":
             btn.configure(text='F: Disable')
-    
+
     def start_log(self):
         '''start_log() initlizes the logger into a file called debug.log which will record events for the experiment'''
         handler = logging.FileHandler('debug.log', mode = 'w')
@@ -519,6 +515,7 @@ class Experiment():
         level = "INFO"
         self.pressure_range = np.linspace(start=float(self.pressure_range_min.get()), stop=float(self.pressure_range_max.get()), num=int(self.experimentNumber.get()))
         result = messagebox.askokcancel(title="Configuration Okay?", message=f"You are about to start {self.experimentNumber.get()} Trials at the following pressures:\n{self.pressure_range} Torr\nContinue?")
+        self.start_log()
         self.log_message(thread, level, f"Starting Experiment Series at pressures {self.pressure_range} Torr")
         def next_trial(trial, pressure_range):
             if trial!=0:
@@ -550,7 +547,7 @@ class Experiment():
         level = "INFO"
         
         #start the debug log and clear the oscilloscope plot for a new experiment
-        self.start_log()
+
         self.axes.clear()
         self.triggered_var.set(0)
         #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
@@ -583,7 +580,6 @@ class Experiment():
 
         
         self.log_message(thread, level, "Setting Chamber Pressure")
-        self.isTargetPressure.clear()
         pressure_set = Thread(target=lambda: self.set_chamber_pressure(), daemon=True)
         pressure_set.start()
 
@@ -628,6 +624,7 @@ class Experiment():
         #thread starts recording pressure continuouslly until the end of the experiment
         #pressure_lock = Lock() #this is to allow the live_pressure and MFcpressure to access the same variables without hanging the application
         self.log_message(thread, level, "Starting Continuous Pressure Reading")
+        self.isTargetPressure.clear()
         live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
         live_pressure.start()
         #thread starts reading DMM
@@ -963,9 +960,9 @@ class Experiment():
         current_run[9] = float(self.voltage_out_var.get())*0.000001 #uncertainty in measured voltage
         current_run[10] = dp_fine #uncertainty in MKS transducer
         current_run[11] = dp_rough #uncertainty in measured pressure by kurt J lesker
-        current_run[12] = 0.1 #uncertainty in distance
-        current_run[13] = (float(self.rough_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_rough/float(self.rough_pressure_var.get()))+(0.1/float(self.electrode_pos_var.get()))) #kurt J lesker d(pd)
-        current_run[14] = (float(self.fine_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_fine/float(self.rough_pressure_var.get()))+(0.1/float(self.electrode_pos_var.get()))) #MKS d(pd)
+        current_run[12] = 0.05 #uncertainty in distance +/- half a mm from ruler measurement
+        current_run[13] = (float(self.rough_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_rough/float(self.rough_pressure_var.get()))+(0.05/float(self.electrode_pos_var.get()))) #kurt J lesker d(pd)
+        current_run[14] = (float(self.fine_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_fine/float(self.fine_pressure_var.get()))+(0.05/float(self.electrode_pos_var.get()))) #MKS d(pd)
         
         self.ExperimentRunValues[0] = current_run
         newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
