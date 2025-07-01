@@ -26,6 +26,10 @@ class Experiment():
         self.v_out = None
         self.auto_range = None
 
+
+        self.voltage_time_reading = []
+        self.t_trigger = None
+
         #This is used for calbrating the MKS sensor which I was unable to zero at an appropriatly small pressure
         self.pressure_min = 0.11 #Torr #MKS Sensor
         self.pressure_max = 10 #Torr #MKS Sensor
@@ -743,12 +747,19 @@ class Experiment():
         while(self.isExperimentStarted.is_set() & self.isDischargeTriggered.is_set() == False):
             voltage = self.Dmm.resource.query(':READ?')
             self.parent.after(1, lambda: self.voltage_out_var.set(voltage))
+            self.voltage_time_reading.append((time.time(), float(voltage)))
             if(self.StopALL.is_set()):
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
                 self.Dmm.close_device()
                 return
         if(self.isDischargeTriggered.is_set()):
             self.isDischargeTriggered.dmm_voltage = voltage
+            voltageseries = np.array(self.voltage_time_reading)
+            times = voltageseries[:,0]
+            voltages = voltageseries[:,1]
+            idx = np.argmin(np.abs(times-self.t_trigger))
+            voltage = voltages[idx]
+            self.parent.after(1, lambda: self.voltage_out_var.set(voltage))
             self.log_message(thread, level, f"Discharge Triggered at {voltage} V")
             return
         
@@ -762,8 +773,10 @@ class Experiment():
             else:
                 VPP_num = float(VPP[5:-1])
             if VPP_num > 0:
+                self.t_trigger = time.time()
                 self.isDischargeTriggered.set()
                 self.triggered_var.set(1)
+
                 self.Osc.resource.write("STOP")
                 self.log_message("OSC", "INFO", "Discharge Detected")
                 self.osc_plot()
@@ -967,6 +980,12 @@ class Experiment():
         self.ExperimentRunValues[0] = current_run
         newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
         self.experimentOutputDataFrame = pd.concat([newdataframe, self.experimentOutputDataFrame])
+
+        #remove this after DMM test
+        df = pd.DataFrame(self.voltage_time_reading, columns=['timestamp', 'voltage'])
+        df.to_csv('dmm_timeseries.csv', mode='w', index=False)
+        print(self.t_trigger)
+        ######
         self.isSaved.clear()
         print(self.experimentOutputDataFrame)
 
