@@ -1,9 +1,10 @@
-
 import numpy as np
 import pandas as pd
 from tkinter import filedialog as fd
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
+
+plt.rcParams['text.usetex'] = False
 
 def unpack_coeffs(coeffs):
     left = coeffs[:2]
@@ -65,7 +66,7 @@ def concavity_conditions(coeffs, left_knot, right_knot):
     return [c_up_left, c_up_right]
 
 
-def plot_data(ax, dataframe: pd.DataFrame, label = "Experimental Data"):
+def plot_data(ax, dataframe: pd.DataFrame, label = "Experimental Data", color = None, mask_value = 0):
     #Isolation of data
     p = dataframe.iloc[:,5].values
     d = dataframe.iloc[:,8].values
@@ -77,18 +78,20 @@ def plot_data(ax, dataframe: pd.DataFrame, label = "Experimental Data"):
     v_err = dataframe.iloc[:,9].values
 
     #masking for <2 cm*torr
-    #mask = p_d
+    def mask_less_than(arr, value):
+        return np.ma.masked_where(p_d>value,arr)
 
-    #v = v[mask]
-    #pd_err = pd_err[mask]
-    #v_err = v_err[mask]
-    #p_d = p_d[mask]
+    if mask_value > 0:
+        v = mask_less_than(v, 3.5)
+        pd_err = mask_less_than(pd_err, 3.5)
+        v_err = mask_less_than(v_err, 3.5)
+        p_d = mask_less_than(p_d, 3.5)
 
     
-    ax.errorbar(p_d, v, yerr=v_err, xerr=pd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = label)
+    ax.errorbar(p_d, v, yerr=v_err, xerr=pd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = label, color = color)
     return v, p_d
 
-def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = "", show_knots = True, show_stoletow = True):
+def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = "", show_knots = True, show_stoletow = True, color = None):
     p_d = x
     v = y
     #Piecewise Fit 
@@ -149,7 +152,7 @@ def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = 
     fitted_coeffs = result.x
     x_fit = np.linspace(p_d.min(), p_d.max(), 500)
     y_fit = find_peicewise(x_fit, fitted_coeffs, p_d[left_knot_index], p_d[right_knot_index])
-    ax.plot(x_fit, y_fit, color = 'red', label = f"{label} Fitted Piecewise Model")
+    ax.plot(x_fit, y_fit, color = color, label = f"{label} Fitted Piecewise Model")
 
     stoletow_point_index = y_fit.argmin()
     if show_stoletow:
@@ -164,17 +167,20 @@ ax = fig.add_subplot(111)
 lab_data_5mm = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/202565_N2_5mm.csv')
 lab_data_10mm = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/2025612_N2_10mm.csv')
 lab_data_old = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/NelsonData.csv')
+lab_data_2_5mm = pd.read_csv('C:/USers/gerows/Python/SAIL-Plasma/202572_N2_2_5.csv')
+lab_data_2_5mm = lab_data_2_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_5mm = lab_data_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_10mm = lab_data_10mm.sort_values(by='p_MKS(Torr)')
 nelson = lab_data_old.sort_values(by='Pressure (Torr)')
 
-v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap")
-v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap")
+v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
+v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
+v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
 
 
-#coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=True, show_stoletow=True)
-#coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False)
-
+#coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, color='xkcd:black')
+#coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, color='xkcd:red')
+coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=False, show_stoletow=False, color='xkcd:blue')
 
 #nelson data
 
@@ -188,20 +194,35 @@ nelsonp_d = np.array(nelsonp*nelsond)
 nelsonpd_err = nelson.iloc[:,11].values
 nelsonv_err = nelson.iloc[:,8].values
 
-#ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24")
+#ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
 
 #####
 
 #Theoretical Curve
 A = 15
 B = 365
-gg = 10**-2
-p_d_theory = np.linspace(0.31, 6, 1000)
-Vcr_parallel = (B*p_d_theory)/np.log((A*p_d_theory)/np.log(1+(1/gg)))
-#ax.plot(p_d_theory, Vcr_parallel, label = 'SE32')
+gg_low = 10**-2
+gg_high = 10**-1
+p_d_theory_low = np.linspace(0.31, 6, 1000)
+p_d_theory_high = np.linspace(0.2, 6, 1000)
+Vcr_parallel_low = (B*p_d_theory_low)/np.log((A*p_d_theory_low)/np.log(1+(1/gg_low)))
+Vcr_parallel_high = (B*p_d_theory_high)/np.log((A*p_d_theory_high)/np.log(1+(1/gg_high)))
+#ax.fill_between(p_d_theory_high, Vcr_parallel_low, Vcr_parallel_high, label = 'SE32 Literature', alpha=0.2)
+#ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,600), xytext=(4.5, 600))
+
+
+#Theoretical curve with calculated A and B
+A_ion = 7.68 #from Nelson 2024
+B_ion = 366.69 #from Nelson 2024
+p_d_theory_low = np.linspace(0.61, 6, 1000)
+p_d_theory_high = np.linspace(0.32, 6, 1000)
+Vcr_parallel_low_i = (B_ion*p_d_theory_low)/np.log((A_ion*p_d_theory_low)/np.log(1+(1/gg_low)))
+Vcr_parallel_high_i = (B_ion*p_d_theory_high)/np.log((A_ion*p_d_theory_high)/np.log(1+(1/gg_high)))
+#ax.fill_between(p_d_theory_high, Vcr_parallel_low_i, Vcr_parallel_high_i, label = 'SE32 Ionization', alpha=0.2)
+#ax.annotate(f'A = {A_ion}, B = {B_ion} gg [{gg_low},{gg_high}]',xy=(3.5,730), xytext=(3.5, 730))
 
 p_d_riousset = np.concatenate([np.arange(0.7,2,0.1),np.arange(2,12.5,0.5)])*0.5
-Vcr_spherical = np.array([434.256,
+Vcr_spherical_lower = np.array([434.256,
                             240.72,
                             184.816,
                             159.144,
@@ -236,14 +257,48 @@ Vcr_spherical = np.array([434.256,
                             234.352,
                             240.032
                             ])
-#ax.plot(p_d_riousset, Vcr_spherical, label = 'R24')
+Vcr_spherical_gg_upper = np.array([66.9804000000000,
+                                   64.5027000000000,
+                                   63.5136000000000,
+                                   63.3347000000000,
+                                   63.6388000000000,
+                                   64.2491000000000,
+                                   65.0624000000000,
+                                   66.0148000000000,
+                                   67.0649000000000,
+                                   68.1847000000000,
+                                   69.3548000000000,
+                                   70.5614000000000,
+                                   71.7945000000000,
+                                   73.0467000000000,
+                                   79.4403000000000,
+                                   85.8560000000000,
+                                   92.1840000000000,
+                                   98.3920000000000,
+                                   104.480000000000,
+                                   110.448000000000,
+                                   116.296000000000,
+                                   122.048000000000,
+                                   127.696000000000,
+                                   133.264000000000,
+                                   138.744000000000,
+                                   144.144000000000,
+                                   149.480000000000,
+                                   154.744000000000,
+                                   159.944000000000,
+                                   165.088000000000,
+                                   170.176000000000,
+                                   175.216000000000,
+                                   180.208000000000,
+                                   185.144000000000])
+#ax.fill_between(p_d_riousset, Vcr_spherical_lower, Vcr_spherical_gg_upper, label = 'R24', alpha = 0.2, color = 'xkcd:green')
 
 #Graph Appearence
 ax.set_title("Air Breakdown with 0.8cm Steel Electrode", fontsize = 18)
-ax.set_ylim([100, 800])
+ax.set_ylim([50, 750])
 ax.set_xlabel(r'$pd[cm*Torr]$', fontsize = 18)
 ax.set_ylabel(r'$V_{cr}[V]$', fontsize = 18)
 ax.minorticks_on()
 ax.tick_params(axis='both', which = 'major', labelsize=16)
-ax.legend(loc="lower right", frameon=False, fontsize = 16)
+ax.legend(loc="lower right", frameon=False)
 plt.show()
