@@ -4,7 +4,7 @@ from tkinter import filedialog as fd
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
-plt.rcParams['text.usetex'] = False
+plt.rcParams['text.usetex'] = True
 
 def unpack_coeffs(coeffs):
     left = coeffs[:2]
@@ -91,7 +91,7 @@ def plot_data(ax, dataframe: pd.DataFrame, label = "Experimental Data", color = 
     ax.errorbar(p_d, v, yerr=v_err, xerr=pd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = label, color = color)
     return v, p_d
 
-def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = "", show_knots = True, show_stoletow = True, color = None):
+def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = "", show_knots = True, show_stoletow = True, label_regions = True, color = None):
     p_d = x
     v = y
     #Piecewise Fit 
@@ -117,7 +117,10 @@ def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = 
     if show_knots:
         ax.axvline(x=p_d[left_knot_index], color = 'grey', linestyle = '--', label = 'Left Min Knot')
         ax.axvline(x=p_d[right_knot_index], color = 'grey', linestyle = '-.', label = 'Right Min Knot')
-
+    if label_regions:
+        ax.text((p_d[left_knot_index])/2, 75, '(I)', fontsize=12, color='grey', ha='center')
+        ax.text((p_d[right_knot_index]+p_d[left_knot_index])/2, 75, '(II)', fontsize=12, color='grey', ha='center')
+        ax.text((p_d[right_knot_index]+(p_d[right_knot_index]+p_d[left_knot_index])/4), 75, '(III)', fontsize=12, color='grey', ha='center')
     #piecewise functions
     left_v = v[:left_knot_index+1]
     middle_v = v[left_knot_index:right_knot_index+1]
@@ -156,7 +159,7 @@ def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = 
 
     stoletow_point_index = y_fit.argmin()
     if show_stoletow:
-        ax.scatter(x_fit[stoletow_point_index], y_fit[stoletow_point_index], marker = '*',s = 200, ec = 'black', color = 'yellow', label = f"{label} Stoletow Point")
+        ax.scatter(x_fit[stoletow_point_index], y_fit[stoletow_point_index], marker = '+',s = 400, ec = 'black', color = 'black', label = f"{label} Stoletow Point", zorder=7)
     return fitted_coeffs
 
 #initilize Graph
@@ -164,27 +167,28 @@ fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111)
 
 #Most recent lab data
-lab_data_5mm = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/202565_N2_5mm.csv')
-lab_data_10mm = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/2025612_N2_10mm.csv')
-lab_data_old = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/NelsonData.csv')
-lab_data_2_5mm = pd.read_csv('C:/USers/gerows/Python/SAIL-Plasma/202572_N2_2_5.csv')
+lab_data_5mm = pd.read_csv('./202565_N2_5mm.csv')
+lab_data_10mm = pd.read_csv('./2025612_N2_10mm.csv')
+#lab_data_old = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/NelsonData.csv')
+lab_data_2_5mm = pd.read_csv('./202572_N2_2_5.csv')
 lab_data_2_5mm = lab_data_2_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_5mm = lab_data_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_10mm = lab_data_10mm.sort_values(by='p_MKS(Torr)')
-nelson = lab_data_old.sort_values(by='Pressure (Torr)')
+#nelson = lab_data_old.sort_values(by='Pressure (Torr)')
 
-v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
+#v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
 v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
-v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
+#v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
 
 
 #coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, color='xkcd:black')
 #coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, color='xkcd:red')
-coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=False, show_stoletow=False, color='xkcd:blue')
+coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=True, show_stoletow=True, label_regions=True, color='xkcd:blue')
 
 #nelson data
 
 #Isolation of data
+'''
 nelsonp = nelson.iloc[:,5].values
 nelsond = nelson.iloc[:,7].values
 nelsonv = nelson.iloc[:,3].values
@@ -193,7 +197,7 @@ nelsonp_d = np.array(nelsonp*nelsond)
 #Grabbing Errorbars
 nelsonpd_err = nelson.iloc[:,11].values
 nelsonv_err = nelson.iloc[:,8].values
-
+'''
 #ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
 
 #####
@@ -294,10 +298,10 @@ Vcr_spherical_gg_upper = np.array([66.9804000000000,
 #ax.fill_between(p_d_riousset, Vcr_spherical_lower, Vcr_spherical_gg_upper, label = 'R24', alpha = 0.2, color = 'xkcd:green')
 
 #Graph Appearence
-ax.set_title("Air Breakdown with 0.8cm Steel Electrode", fontsize = 18)
+ax.set_title("Air Breakdown with 0.8 cm Diameter Steel Electrode", fontsize = 18)
 ax.set_ylim([50, 750])
-ax.set_xlabel(r'$pd[cm*Torr]$', fontsize = 18)
-ax.set_ylabel(r'$V_{cr}[V]$', fontsize = 18)
+ax.set_xlabel(r'$pd[\rm cm*Torr]$', fontsize = 18)
+ax.set_ylabel(r'$V_{\rm cr}[V]$', fontsize = 18)
 ax.minorticks_on()
 ax.tick_params(axis='both', which = 'major', labelsize=16)
 ax.legend(loc="lower right", frameon=False)
