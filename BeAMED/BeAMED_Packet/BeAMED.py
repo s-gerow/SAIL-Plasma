@@ -73,7 +73,8 @@ class Experiment():
         self.StopALL = Event()
 
         class experimentEvent(Event):
-            '''A custom Event class to store wether the experiment is triggered or not as well as store and output the relavent output data.'''
+            '''A custom Event class to store wether the experiment is triggered or not as well as store and output the relavent output data.
+            I never properly implemented this so its kind of depreciated at this point'''
             def __init__(self):
                 super().__init__()
                 self.pressure = ""
@@ -112,7 +113,7 @@ class Experiment():
         
         tk.Label(device_opt_frame, text = 'VISA Power').grid(row=0, column=0)
         self.pwr_cbox = ttk.Combobox(device_opt_frame, state = 'readonly', values = self.check_IO())
-        self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.pwr_cbox))
+        self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.pwr_cbox)) #when you click on an option in the device boxes it will auto query the resource manager in order to update the list of available instruments
         self.pwr_cbox.grid(row =0, column=1)
         
         tk.Label(device_opt_frame, text = 'VISA DMM').grid(row=1,column=0)
@@ -390,18 +391,20 @@ class Experiment():
                         to = 800,
                         textvariable=self.init_pressure
                         ).grid(row=3, column=1)
-        self.rough_pressure_var = tk.DoubleVar()
+        self.rough_pressure_var = tk.DoubleVar() #pressure from KJL sensor
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.rough_pressure_var
                         ).grid(row=4, column=1)
-        self.fine_pressure_var = tk.DoubleVar()
+        self.fine_pressure_var = tk.DoubleVar() #pressure from MKS sensor
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.fine_pressure_var
                         ).grid(row=5, column=1)
+        
+        #laura add voltage reading boxes here.
         
         tk.Label(experimentOutputFrame, text="Save to:").grid(column=2, row=0)
         self.SaveFile = tk.StringVar()
@@ -409,6 +412,7 @@ class Experiment():
 
 
         #_________________Create New Dropdown Options_________________________#
+        #this is for the menu at the top of the window "file", "dev tools", etc. I have not fully implemented this so a lot of them dont work or haven't been updated. Dont worry about this. Ill fix it in the next big upgrade
         self.parent.menubar.devMenu.add_command(label = "Test Trigger", command= self.test_trigger_experiment)
         self.parent.menubar.devMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.devMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
@@ -638,6 +642,10 @@ class Experiment():
         #thread monitors oscilliscope for trigger
         live_osc = Thread(target = lambda: self.readOsc(), daemon = True)
         live_osc.start()
+        #laura start here
+        #add thread for voltage reading
+
+
         #thread increases voltage at set rate 0.5V/3s
         init_v = float(self.init_v_var.get())
         init_c = float(self.init_current_var.get())
