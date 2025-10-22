@@ -14,7 +14,7 @@ fig = plt.figure(figsize=(10, 8))
 A = 1.04
 B = 596.8
 gg = 10**-2
-pd = np.linspace(10**-1, 10**3, 10**3)
+pd = np.linspace(10**-1, 10**3, 10**4)
 
 def paschen_perp_2d(angle):
         A = 1.04
@@ -22,7 +22,7 @@ def paschen_perp_2d(angle):
         gg = 10**-2
         beta_angle = angle*(np.pi/180)
         beta = np.ones([10**3,])*beta_angle
-        pd = np.linspace(10**-1, 10**3, 10**3)
+        pd = np.linspace(10**-1, 10**3, 10**4)
         beta, pd = np.meshgrid(beta, pd)
         return (B*pd*beta/np.sin(beta))/np.log((beta*A*pd/np.sin(beta))/np.log(1+(1/gg)))
 
@@ -61,15 +61,15 @@ ax3.view_init(elev=25, azim=25, roll=0)
 
 ax2 = fig.add_subplot(111)
 ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(0.1)), 'b', label = "~0 degrees")
-ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(45)), 'orange', label = '15 degrees')
-ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(60)), 'green', label = '5 degrees')
-ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(90)), 'pink', label = '2.5 degrees' )
-ax2.plot(np.log10(pd), np.log10(Vcr_parallel), 'r.', label = 'parallel')
+ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(10)), 'orange', label = '10 degrees')
+#ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(30)), 'green', label = '30 degrees')
+#ax2.plot(np.log10(pd), np.log10(paschen_perp_2d(45)), 'pink', label = '45 degrees' )
+#ax2.plot(np.log10(pd), np.log10(Vcr_parallel), 'r.', label = 'parallel')
 
-ax2.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
-ax2.yaxis.set_major_locator(mticker.MaxNLocator(integer=True))
-ax2.xaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
-ax2.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+#ax2.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
+#ax2.yaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+#ax2.xaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
+#ax2.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
 
 ax2.set_xlabel(r'$pd[cm*Torr]$')
 ax2.set_ylabel(r'$V_{cr}[V]$')

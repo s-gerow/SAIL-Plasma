@@ -181,8 +181,8 @@ lab_data_10mm = lab_data_10mm.sort_values(by='p_MKS(Torr)')
 nelson = lab_data_old.sort_values(by='Pressure (Torr)')
 
 v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
-#v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
-#v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
+v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
+v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
 
 
 <<<<<<< Updated upstream
