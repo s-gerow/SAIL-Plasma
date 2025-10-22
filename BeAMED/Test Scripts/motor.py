@@ -62,35 +62,55 @@ on_button.pack(pady = 50)
  
 def run():
     run_bool = True
-    
+    target = 0.5
     DMM.write(':SENS:FUNC "CONT"')
     DMM.write('TRAC:FILL:MODE CONT,"defbuffer1"') #continuous fill
-    with nidaqmx.Task() as do_task:
-        Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
-        Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line3")
 
+    with nidaqmx.Task() as do_task:
+        
+        Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line1")
+        Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
+
+        # Change direction here: True (down) or False (up)
+        direction = True  # Toggle this to reverse motor direction
+
+        # Set DIR before stepping
+        do_task.write([direction, False], auto_start=True)
+        time.sleep(0.00001)  # ≥5 µs DIR setup time
+        ohm = float(DMM.query(":READ?"))
+        while ohm > 500:
+            do_task.write([direction, True], auto_start=True)   # PUL HIGH
+            time.sleep(0.000005)
+            do_task.write([direction, False], auto_start=True)  # PUL LOW
+            time.sleep(0.000005)
+            print("Direction Down")
+            ohm = float(DMM.query(":READ?"))
+        #switch direction
+        direction = False  # Toggle this to reverse motor direction
+        do_task.write([direction, False], auto_start=True)
+        time.sleep(0.00001)  # ≥5 µs DIR setup time
+        for _ in np.arange(0,target*3200,1):
+            do_task.write([direction, True], auto_start=True)   # PUL HIGH
+            time.sleep(0.000005)
+            do_task.write([direction, False], auto_start=True)  # PUL LOW
+            time.sleep(0.000005)
+            #print("Direction Up")
+            ohm = float(DMM.query(":READ?"))
+        do_task.close()
+        DMM.close()
+        rm.close()
+        '''
         while run_bool:
             ohm = float(DMM.query(":READ?"))
             if ohm < 500: #Move down
                 DMM.close()
                 rm.close()
                 break
-                '''
-                do_task.write([False,True],auto_start=True,timeout=10) 
-                sleep(0.5)
-                for x in range(1600):
-                    do_task.write([True,True],auto_start=True,timeout=10)
-                    sleep(.0000025)
-                    do_task.write([False,True],auto_start=True,timeout=10)
-                    sleep(0.0000025)
-                    print("Direction CW")
-                    
-                sleep(1)
-                '''
             else:       #Move down
                 
-                #do_task.write([True,False],auto_start=True,timeout=10) 
-                sleep(0.5)
+                do_task.write([True,True],auto_start=True,timeout=10) 
+                sleep(0.000005)
+                do_task.write([True,True],auto_start=True,timeout=10) 
                 for x in range(3200):
                     do_task.write([True,False],auto_start=True,timeout=10)
                     sleep(.0000025)
@@ -106,10 +126,9 @@ def run():
                             do_task.write([False,False],auto_start=True,timeout=10)
                             sleep(0.0000025)
                             print("Direction Up")
-                        DMM.close()
-                        rm.close()
+                        
                         break
-
+'''
 
 def clean_exit():
     #runthread.stop()

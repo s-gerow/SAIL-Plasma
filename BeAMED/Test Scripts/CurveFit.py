@@ -177,11 +177,11 @@ lab_data_10mm = lab_data_10mm.sort_values(by='p_MKS(Torr)')
 nelson = lab_data_old.sort_values(by='Pressure (Torr)')
 
 v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
-#v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
-#v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
+v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
+v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
 
 
-coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, color='xkcd:black')
+#coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, color='xkcd:black')
 #coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, color='xkcd:red')
 #coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=True, show_stoletow=True, label_regions=True, color='xkcd:blue')
 
@@ -198,7 +198,7 @@ nelsonp_d = np.array(nelsonp*nelsond)
 nelsonpd_err = nelson.iloc[:,11].values
 nelsonv_err = nelson.iloc[:,8].values
 
-ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
+#ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
 
 #####
 

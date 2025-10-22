@@ -799,8 +799,10 @@ class Experiment():
     def set_chamber_pressure(self):
         daq_DO = DAQDevice("Valve Control")
         try:
+            
             daq_DO.task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="PumpValve")
             daq_DO.task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="VentValve")
+            
             #get target pressure
             #set min pressure always 20mTorr
             min_pressure = 2#0.020
