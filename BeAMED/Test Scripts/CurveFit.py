@@ -158,6 +158,7 @@ def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = 
     ax.plot(x_fit, y_fit, color = color, label = f"{label} Fitted Piecewise Model")
 
     stoletow_point_index = y_fit.argmin()
+    #print(f"stoletow: ({x_fit[stoletow_point_index]}pd,{y_fit[stoletow_point_index]}V)\n")
     if show_stoletow:
         ax.scatter(x_fit[stoletow_point_index], y_fit[stoletow_point_index], marker = '+',s = 400, ec = 'black', color = 'black', label = f"{label} Stoletow Point", zorder=7)
     return fitted_coeffs
@@ -169,31 +170,23 @@ ax = fig.add_subplot(111)
 #Most recent lab data
 lab_data_5mm = pd.read_csv('./202565_N2_5mm.csv')
 lab_data_10mm = pd.read_csv('./2025612_N2_10mm.csv')
-<<<<<<< Updated upstream
-lab_data_old = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/NelsonData.csv')
-=======
 lab_data_old = pd.read_csv('./NelsonData.csv')
->>>>>>> Stashed changes
 lab_data_2_5mm = pd.read_csv('./202572_N2_2_5.csv')
 lab_data_2_5mm = lab_data_2_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_5mm = lab_data_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_10mm = lab_data_10mm.sort_values(by='p_MKS(Torr)')
 nelson = lab_data_old.sort_values(by='Pressure (Torr)')
 
-v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
-v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
+#v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
+#v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
 v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
 
 
-<<<<<<< Updated upstream
-coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, color='xkcd:black')
-#coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, color='xkcd:red')
-#coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=True, show_stoletow=True, label_regions=True, color='xkcd:blue')
-=======
-#coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, label_regions = False, color='xkcd:black')
-#coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, label_regions = False, color='xkcd:red')
-coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=True, show_stoletow=True, label_regions=True, color='xkcd:blue')
->>>>>>> Stashed changes
+#coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, label_regions=False, color='xkcd:black')
+
+coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, label_regions = False, show_stoletow=False, color='xkcd:red')
+
+#coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=False, show_stoletow=True, label_regions=False, color='xkcd:blue')
 
 #nelson data
 
@@ -208,30 +201,41 @@ nelsonp_d = np.array(nelsonp*nelsond)
 nelsonpd_err = nelson.iloc[:,11].values
 nelsonv_err = nelson.iloc[:,8].values
 
-<<<<<<< Updated upstream
-ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
-=======
 #ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
->>>>>>> Stashed changes
 
 #####
 
 #Theoretical Curve
-A = 15
-B = 365
+#A = 15
+#B = 365
+A=6.1522
+B = 485.5867
 gg_low = 10**-2
 gg_high = 10**-1
 p_d_theory_low = np.linspace(0.31, 6, 1000)
 p_d_theory_high = np.linspace(0.2, 6, 1000)
 Vcr_parallel_low = (B*p_d_theory_low)/np.log((A*p_d_theory_low)/np.log(1+(1/gg_low)))
 Vcr_parallel_high = (B*p_d_theory_high)/np.log((A*p_d_theory_high)/np.log(1+(1/gg_high)))
-#ax.fill_between(p_d_theory_high, Vcr_parallel_low, Vcr_parallel_high, label = 'SE32 Literature', alpha=0.2, color = 'xkcd:grey')
-#ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,600), xytext=(4.5, 600))
+ax.fill_between(p_d_theory_high, Vcr_parallel_low, Vcr_parallel_high, label = 'SE32', alpha=0.2, color = 'xkcd:grey')
+ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,600), xytext=(4.5, 600))
 
+#Testing Riousset new numbers
+A_new = 6.1522
+B5 = 658
+B25 = 634
+B10 = 649
+gg5 = 0.0677
+gg25 = 0.0848
+gg10 = 0.0247
+p_d_low = np.linspace(0.2,6,1000)
+Vcr10 = (B10*p_d_low)/np.log((A_new*p_d_low)/np.log(1+(1/gg10)))
+Vcr5 = (B5*p_d_low)/np.log((A_new*p_d_low)/np.log(1+(1/gg5)))
+Vcr25 = (B25*p_d_low)/np.log((A_new*p_d_low)/np.log(1+(1/gg25)))
+ax.plot(p_d_low, Vcr10,label=f"A={A_new}, B={B10},gg={gg10}")
 
 #Theoretical curve with calculated A and B
-A_ion = 7.68 #from Nelson 2024
-B_ion = 366.69 #from Nelson 2024
+A_ion = 6.1522 #from Nelson 2024
+B_ion =  0.0677 #from Nelson 2024
 p_d_theory_low = np.linspace(0.61, 6, 1000)
 p_d_theory_high = np.linspace(0.32, 6, 1000)
 Vcr_parallel_low_i = (B_ion*p_d_theory_low)/np.log((A_ion*p_d_theory_low)/np.log(1+(1/gg_low)))
@@ -265,7 +269,7 @@ Vcr_cylindrical_lower_nelson = np.array([-198.588635239434,-543.514922907131,-76
 
 #Graph Appearence
 ax.set_title("Air Breakdown with 0.8 cm Diameter Steel Electrode", fontsize = 18)
-ax.set_ylim([50, 750])
+ax.set_ylim([100, 2500])
 ax.set_xlabel(r'$pd~{\rm (cm\cdot Torr)}$', fontsize = 18)
 ax.set_ylabel(r'$V_{\rm cr}~{\rm (V)}$', fontsize = 18)
 ax.minorticks_on()

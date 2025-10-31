@@ -60,86 +60,108 @@ on_button = Button(root, image = on, bd = 0,
                    command = switch)
 on_button.pack(pady = 50)
  
-def run():
-    run_bool = True
-    target = 0.5
-    DMM.write(':SENS:FUNC "CONT"')
-    DMM.write('TRAC:FILL:MODE CONT,"defbuffer1"') #continuous fill
+# def run():
+#     run_bool = True
+#     target = 0.5
+#     DMM.write(':SENS:FUNC "CONT"')
+#     DMM.write('TRAC:FILL:MODE CONT,"defbuffer1"') #continuous fill
 
-    with nidaqmx.Task() as do_task:
+#     with nidaqmx.Task() as do_task:
         
-        Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line1")
-        Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
+#         Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line1")
+#         Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
 
-        # Change direction here: True (down) or False (up)
-        direction = True  # Toggle this to reverse motor direction
+#         # Change direction here: True (down) or False (up)
+#         direction = True  # Toggle this to reverse motor direction
 
-        # Set DIR before stepping
-        do_task.write([direction, False], auto_start=True)
-        time.sleep(0.00001)  # ≥5 µs DIR setup time
-        ohm = float(DMM.query(":READ?"))
-        while ohm > 500:
-            do_task.write([direction, True], auto_start=True)   # PUL HIGH
-            time.sleep(0.000005)
-            do_task.write([direction, False], auto_start=True)  # PUL LOW
-            time.sleep(0.000005)
-            print("Direction Down")
-            ohm = float(DMM.query(":READ?"))
-        #switch direction
-        direction = False  # Toggle this to reverse motor direction
-        do_task.write([direction, False], auto_start=True)
-        time.sleep(0.00001)  # ≥5 µs DIR setup time
-        for _ in np.arange(0,target*3200,1):
-            do_task.write([direction, True], auto_start=True)   # PUL HIGH
-            time.sleep(0.000005)
-            do_task.write([direction, False], auto_start=True)  # PUL LOW
-            time.sleep(0.000005)
-            #print("Direction Up")
-            ohm = float(DMM.query(":READ?"))
-        do_task.close()
-        DMM.close()
-        rm.close()
-        '''
-        while run_bool:
-            ohm = float(DMM.query(":READ?"))
-            if ohm < 500: #Move down
-                DMM.close()
-                rm.close()
-                break
-            else:       #Move down
+#         # Set DIR before stepping
+#         do_task.write([direction, False], auto_start=True)
+#         time.sleep(0.00001)  # ≥5 µs DIR setup time
+#         ohm = float(DMM.query(":READ?"))
+#         while ohm > 500:
+#             do_task.write([direction, True], auto_start=True)   # PUL HIGH
+#             time.sleep(0.000005)
+#             do_task.write([direction, False], auto_start=True)  # PUL LOW
+#             time.sleep(0.000005)
+#             print("Direction Down")
+#             ohm = float(DMM.query(":READ?"))
+#         #switch direction
+#         direction = False  # Toggle this to reverse motor direction
+#         do_task.write([direction, False], auto_start=True)
+#         time.sleep(0.00001)  # ≥5 µs DIR setup time
+#         for _ in np.arange(0,target*3200,1):
+#             do_task.write([direction, True], auto_start=True)   # PUL HIGH
+#             time.sleep(0.000005)
+#             do_task.write([direction, False], auto_start=True)  # PUL LOW
+#             time.sleep(0.000005)
+#             #print("Direction Up")
+#             ohm = float(DMM.query(":READ?"))
+#         do_task.close()
+#         DMM.close()
+#         rm.close()
+#         '''
+#         while run_bool:
+#             ohm = float(DMM.query(":READ?"))
+#             if ohm < 500: #Move down
+#                 DMM.close()
+#                 rm.close()
+#                 break
+#             else:       #Move down
                 
-                do_task.write([True,True],auto_start=True,timeout=10) 
-                sleep(0.000005)
-                do_task.write([True,True],auto_start=True,timeout=10) 
-                for x in range(3200):
-                    do_task.write([True,False],auto_start=True,timeout=10)
-                    sleep(.0000025)
-                    do_task.write([False,False],auto_start=True,timeout=10)
-                    sleep(0.0000025)
-                    print("Direction Down")
-                    ohm = float(DMM.query(":READ?"))
-                    if ohm < 500: #Move up
-                        sleep(0.5)
-                        for x in range(400):
-                            do_task.write([True,False],auto_start=True,timeout=10)
-                            sleep(.0000025)
-                            do_task.write([False,False],auto_start=True,timeout=10)
-                            sleep(0.0000025)
-                            print("Direction Up")
+#                 do_task.write([True,True],auto_start=True,timeout=10) 
+#                 sleep(0.000005)
+#                 do_task.write([True,True],auto_start=True,timeout=10) 
+#                 for x in range(3200):
+#                     do_task.write([True,False],auto_start=True,timeout=10)
+#                     sleep(.0000025)
+#                     do_task.write([False,False],auto_start=True,timeout=10)
+#                     sleep(0.0000025)
+#                     print("Direction Down")
+#                     ohm = float(DMM.query(":READ?"))
+#                     if ohm < 500: #Move up
+#                         sleep(0.5)
+#                         for x in range(400):
+#                             do_task.write([True,False],auto_start=True,timeout=10)
+#                             sleep(.0000025)
+#                             do_task.write([False,False],auto_start=True,timeout=10)
+#                             sleep(0.0000025)
+#                             print("Direction Up")
                         
-                        break
-'''
+#                         break
+# '''
 
-def clean_exit():
-    #runthread.stop()
-    DMM.close()
-    rm.close()  
-    root.destroy()
+# def clean_exit():
+#     #runthread.stop()
+#     DMM.close()
+#     rm.close()  
+#     root.destroy()
 
-root.protocol('WM_DELETE_WINDOW', clean_exit) 
+# root.protocol('WM_DELETE_WINDOW', clean_exit) 
 
 
-runthread = Thread(target = run, daemon=True)         
-# Execute Tkinter
-runthread.start()
-root.mainloop()
+# runthread = Thread(target = run, daemon=True)         
+# # Execute Tkinter
+# runthread.start()
+# root.mainloop()
+
+def move(dir_state, steps, delay=0.000005):
+    with nidaqmx.Task() as do_task:
+        Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
+        Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line1") #false = up, true =down
+        # Set direction (second bit)
+        do_task.write([False, dir_state])
+        time.sleep(0.00005)  # allow DIR to settle before stepping
+
+        # Pulse step pin (first bit)
+        for _ in range(steps):
+            do_task.write([True, dir_state])   # rising edge on STEP
+            time.sleep(delay)
+            do_task.write([False, dir_state])  # falling edge
+            time.sleep(delay)
+
+# Move down
+move(True, 400)
+time.sleep(0.5)
+
+# Move up
+move(False, 400)      

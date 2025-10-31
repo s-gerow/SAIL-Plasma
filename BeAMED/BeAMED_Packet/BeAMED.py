@@ -291,7 +291,8 @@ class Experiment():
                  ).grid(column=1, row=7)
         self.gas_type = tk.StringVar(value = "N2")
         tk.Spinbox(experimentCondysFrame,
-                    textvariable=self.gas_type
+                    textvariable=self.gas_type,
+                    values=['N2','Ar','CO2']
                     ).grid(column=1, row=8)
 
         #configure button
@@ -418,6 +419,8 @@ class Experiment():
         self.parent.menubar.devMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
         self.parent.menubar.devMenu.add_command(label= "Read Pressure", command = Thread(target=lambda: self.read_pressure(), daemon=True).start)
         self.parent.menubar.devMenu.add_command(label = "Set Chamber Pressure", command = Thread(target = lambda: self.set_chamber_pressure(), daemon=True).start)
+        self.parent.menubar.devMenu.add_command(label= "Open MFC", command = lambda: print(self.run_MFC(5)))
+        self.parent.menubar.devMenu.add_command(label = "Close MFC", command = lambda: print(self.run_MFC(0)))
         self.parent.menubar.fileMenu.add_command(label ="Import Data", command=self.open_save_file)
         self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
         self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
@@ -798,21 +801,22 @@ class Experiment():
 
     def set_chamber_pressure(self):
         daq_DO = DAQDevice("Valve Control")
+        with self.tk_lock:
+            gas = self.gas_type.get()
         try:
-            
             daq_DO.task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="PumpValve")
             daq_DO.task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="VentValve")
             
             #get target pressure
             #set min pressure always 20mTorr
-            min_pressure = 2#0.020
+            min_pressure = 0.040
             #measure pressure drop until at min pressure
             with self.tk_lock:
                 true_pressure = float(self.rough_pressure_var.get())
                 target_pressure = float(self.init_pressure.get())
-            if true_pressure < 730:
+            if true_pressure < 700:
                 #check if pressure of chamber is below "near" atmosphere, if so, fill with air by venting
-                while true_pressure < 730:
+                while true_pressure < 650:
                     with self.daq_lock:
                         daq_DO.task.write([True, False], auto_start=True, timeout=3)
                         #open vent valve
@@ -824,18 +828,61 @@ class Experiment():
                     daq_DO.task.write([False, False], auto_start=True, timeout=3)
                     #close both valves
             #check if true pressure is greater than the target pressure, it will be
-            while true_pressure > target_pressure:
-                with self.daq_lock:
-                    daq_DO.task.write([False, True], auto_start=True, timeout=3)
-                    #open pump valve
-                with self.tk_lock:
-                    true_pressure = float(self.rough_pressure_var.get())
-                if(self.StopALL.is_set()):
+            match gas:
+                case 'N2':
+                    while true_pressure > target_pressure:
+                        #reduce to target pressure and stop
+                        with self.daq_lock:
+                            daq_DO.task.write([False, True], auto_start=True, timeout=3)
+                            #open pump valve
+                        with self.tk_lock:
+                            true_pressure = float(self.rough_pressure_var.get())
+                        if(self.StopALL.is_set()):
+                            return
+                    with self.daq_lock:
+                        daq_DO.task.write([False, False], auto_start=True, timeout=3)
+                        #close both valves
+                    self.isTargetPressure.set()
                     return
-            with self.daq_lock:
-                daq_DO.task.write([False, False], auto_start=True, timeout=3)
-                #close both valves
-            self.isTargetPressure.set()
+                case 'Ar':
+                    diffusionPumpOn = False
+                    while true_pressure > min_pressure:
+                        #reduce to minimum pressure
+                        with self.daq_lock:
+                            daq_DO.task.write([False, True], auto_start=True, timeout=3)
+                            #open pump valve to reduce pressure
+                        with self.tk_lock:
+                            true_pressure = float(self.rough_pressure_var.get())
+                        if true_pressure < .2 and diffusionPumpOn == False:
+                            proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 100mTorr, please plug in the diffusion pump to reach lower pressure")
+                            if proceed == False:
+                                print("stopping, refusal to turn on diffusion pump, cannot continue")
+                                self.StopALL.set()
+                            elif proceed:
+                                diffusionPumpOn = True
+                        if(self.StopALL.is_set()):
+                            return
+                    with self.daq_lock:
+                        daq_DO.task.write([False, False], auto_start=True, timeout=3)
+                    proceed = False
+                    while proceed == False:
+                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 30mTorr, please unplug the diffusion pump to continue")
+                    if proceed == True:
+                        diffusionPumpOn = False
+                    while true_pressure < target_pressure:
+                        #while we are below target argon pressure
+                        flowRate = self.run_MFC(5) #set MFC to maximum flow rate
+                        print(flowRate)
+                        time.sleep(0.1)
+                        with self.tk_lock:
+                            true_pressure = float(self.rough_pressure_var.get())
+                        if(self.StopALL.is_set()):
+                            return
+                    
+                    with self.daq_lock:
+                        flowRate = self.run_MFC(0)    
+                    self.isTargetPressure.set()
+                    return 
         finally:
             with self.daq_lock:
                 daq_DO.task.write([False, False], auto_start=True, timeout=3)
@@ -858,39 +905,42 @@ class Experiment():
         ohm = float(self.Dmm.resource.query(":READ?"))
         
         do_task = nidaqmx.Task()
-        do_task.do_channels.add_do_chan("NI_DAQ/port1/line1")  # DIR
         do_task.do_channels.add_do_chan("NI_DAQ/port1/line2")  # PUL
+        do_task.do_channels.add_do_chan("NI_DAQ/port1/line1")  # DIR
+        
 
         # Change direction here: True (down) or False (up)
-        direction = True  # Toggle this to reverse motor direction
-
-        # Set DIR before stepping
+        dir_state = True  # Toggle this to reverse motor direction
+        delay = 0.000005
+        # Set direction (second bit)
         with self.daq_lock:
-            do_task.write([direction, False], auto_start=True)
-        time.sleep(0.00001)  # ≥5 µs DIR setup time
+            do_task.write([False, dir_state],auto_start=True)
+        time.sleep(0.00005)  # allow DIR to settle before stepping
         while ohm > 500:
+            # Pulse step pin (first bit)
             with self.daq_lock:
-                do_task.write([direction, True], auto_start=True)   # PUL HIGH
-            time.sleep(0.000005)
+                do_task.write([True, dir_state])   # rising edge on STEP
+            time.sleep(delay)
             with self.daq_lock:
-                do_task.write([direction, False], auto_start=True)  # PUL LOW
-            time.sleep(0.000005)
+                do_task.write([False, dir_state])  # falling edge
+            time.sleep(delay)
             #print("Direction Down")
             ohm = float(self.Dmm.resource.query(":READ?"))
             if(self.StopALL.is_set()):
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
         #switch direction
-        direction = False  # Toggle this to reverse motor direction
+        dir_state = False  # Toggle this to reverse motor direction
         with self.daq_lock:
-            do_task.write([direction, False], auto_start=True)
-        time.sleep(0.00001)  # ≥5 µs DIR setup time
+            do_task.write([False, dir_state],auto_start=True)
+        time.sleep(0.00005)  # allow DIR to settle before stepping
         for _ in np.arange(0,target*3200,1):
+            # Pulse step pin (first bit)
             with self.daq_lock:
-                do_task.write([direction, True], auto_start=True)   # PUL HIGH
-            time.sleep(0.000005)
+                do_task.write([True, dir_state])   # rising edge on STEP
+            time.sleep(delay)
             with self.daq_lock:
-                do_task.write([direction, False], auto_start=True)  # PUL LOW
-            time.sleep(0.000005)
+                do_task.write([False, dir_state])  # falling edge
+            time.sleep(delay)
             #print("Direction Up")
             ohm = float(self.Dmm.resource.query(":READ?"))
             if(self.StopALL.is_set()):
@@ -927,6 +977,20 @@ class Experiment():
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write("OUTP:STAT:IMM OFF")
+    
+    def run_MFC(self, setpoint):
+        thread = "MFC"
+        level = "INFO"
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as ai_task:
+            with self.daq_lock:
+                ao_task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", name_to_assign_to_channel="SetPointOutput", min_val=0, max_val=5)
+                ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai3", name_to_assign_to_channel="FlowSignalInput", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
+                ao_task.write(setpoint, auto_start = True, timeout=1)
+            time.sleep(1)
+            with self.daq_lock:
+                flowSignal_voltage = ai_task.read(10) #let flow rate stabilize before returning current flow rate
+            flowSignal_unfiltered_avg = np.median(flowSignal_voltage)
+        return flowSignal_unfiltered_avg
 
     def osc_plot(self):
         self.axes.clear()
@@ -1000,7 +1064,7 @@ class Experiment():
         print(self.experimentOutputDataFrame)
 
     def save_to_new(self):
-        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_BeAMED_Output.csv"
+        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_{self.gas_type.get()}_{self.electrode_pos_var}mm.csv"
         try:
             self.experimentOutputDataFrame.to_csv(filename, mode='x', index=False)
             self.SaveFileType = "CSV"
