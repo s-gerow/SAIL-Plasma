@@ -8,11 +8,19 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from threading import Thread, Event, Lock
 import time
+from scipy import interpolate as interp
 
 class MFCWindow(tk.Tk):
     def __init__(self, screenName = None, baseName = None, className = "mfc window", useTk = True, sync = False, use = None):
         super().__init__(screenName, baseName, className, useTk, sync, use)
-        
+
+        pressure = np.array([0.0001,0.0002,0.0005,0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,300,400,500,600,700,760,800,900,1000])
+        log10pressure = np.log10(pressure)
+        ar = np.array([1, 1.301, 1.699, 1.845, 2.146, 2.519, 2.82, 3.117, 3.511, 3.808, 4.1, 4.494, 4.778, 5.057, 5.389, 5.602, 5.763, 5.895, 5.946, 5.991, 6.053, 6.13, 6.207, 6.274, 6.338, 6.375, 6.4, 6.455, 6.512])
+        self.arVtoP = interp.CubicSpline(ar, log10pressure, bc_type='natural',extrapolate=True)
+
+
+
         self.protocol('WM_DELETE_WINDOW', lambda: self.clean_exit())
 
         self.daqLock = Lock()
@@ -24,15 +32,15 @@ class MFCWindow(tk.Tk):
         #tasks for controlling inputs and outputs
         self.ao_task = nidaqmx.Task()
         self.ai_task = nidaqmx.Task()
-        #do_task = nidaqmx.Task() #I do not think that this will be needed
+        self.do_task = nidaqmx.Task() #I do not think that this will be needed
 
         #assign daq channels
-        #self.ao_task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", name_to_assign_to_channel="SetPointOutput", min_val=0, max_val=5)
+        self.ao_task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", name_to_assign_to_channel="SetPointOutput", min_val=0, max_val=5)
         self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", name_to_assign_to_channel= "KJLPressure", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
         self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai1", name_to_assign_to_channel= "MKSPressure", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
-        #self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai3", name_to_assign_to_channel="FlowSignalInput", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
-        #do_task.do_channels.add_do_chan("NI_DAQ/port1/line0", name_to_assign_to_lines="ValveOpen")
-        #do_task.do_channels.add_do_chan("NI_DAQ/port1/line1", name_to_assign_to_lines="ValveClose")
+        self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai3", name_to_assign_to_channel="FlowSignalInput", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
+        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="ValveOpen")
+        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="ValveClose")
 
 
         #set input settings
@@ -94,6 +102,9 @@ class MFCWindow(tk.Tk):
         
         tk.Button(self.variableFrame, text="Start Monitoring", command=lambda: self.start_measure()).grid(row=10,column=0)
         tk.Button(self.variableFrame, text='Stop Monitoring', command=lambda: self.stop_measure()).grid(row=11,column=0)
+        tk.Button(self.variableFrame, text='Vent Chamber',command=lambda: self.control_valve('vent')).grid(row=12,column=0)
+        tk.Button(self.variableFrame, text='Pump Chamber',command=lambda: self.control_valve('pump')).grid(row=13,column=0)
+        tk.Button(self.variableFrame, text='Close Valves',command=lambda: self.control_valve('stop')).grid(row=14,column=0)
 
         #making data storage arrays
         self.dataframe = pd.DataFrame()
@@ -106,11 +117,16 @@ class MFCWindow(tk.Tk):
         self.pressure_min = 0.11 #Torr #MKS Sensor
         self.pressure_max = 10 #Torr #MKS Sensor
 
+    def argonVoltage2Pressure(self,V):
+        logp = self.arVtoP(V)
+        return 10**logp
+    
     def clean_exit(self):
         '''clean_exit() is used by the parent menu to intercept the "X' button at the top right and ensure that all 
         threads and open processes are closed before the UI quits'''
         self.ai_task.close()
         self.ao_task.close()
+        self.do_task.close()
         self.destroy()
 
     def start_measure(self):
@@ -136,18 +152,23 @@ class MFCWindow(tk.Tk):
             with self.tkLock:
                 setpoint = float(self.tksetPointInput.get())
             with self.daqLock:
-                kjlpressure_voltage, mkspressure_voltage = self.ai_task.read(10) #, flowSignal_voltage
-                #flowSignal_unfiltered_avg = np.median(flowSignal_voltage)
+                kjlpressure_voltage, mkspressure_voltage, flowSignal_voltage = self.ai_task.read(10) #, flowSignal_voltage
+                flowSignal_unfiltered_avg = np.median(flowSignal_voltage)
                 kjlpressure_unfiltered_avg = np.median(kjlpressure_voltage)
                 mkspressure_unfiltered_avg = np.median(mkspressure_voltage)
-                #self.ao_task.write(setpoint, auto_start = True, timeout=1)
+                self.ao_task.write(setpoint, auto_start = True, timeout=1)
             match self.tkgas.get():
                 case 'N2':
                     true_pressure = 10**(kjlpressure_unfiltered_avg - 5)
                     new_true_pressure = (mkspressure_unfiltered_avg/10)*(self.pressure_max-self.pressure_min)+self.pressure_min
                 case 'Ar':
                     print("ar")
-                    true_pressure = 10**(kjlpressure_unfiltered_avg - 5) #fix this, find correct conversion factor
+                    print(kjlpressure_unfiltered_avg)
+                    ar2_pressure = 10**(kjlpressure_unfiltered_avg - 5) #fix this, find correct conversion factor
+                    true_pressure = self.argonVoltage2Pressure(kjlpressure_unfiltered_avg)
+                    print(ar2_pressure)
+                    print(true_pressure)
+
             #with self.tkLock:
                 #self.after(1, self.tkpressure.set(true_pressure))
                 #self.after(1, self.tkflowSignalOutput.set(flowSignal_unfiltered_avg))
@@ -156,7 +177,7 @@ class MFCWindow(tk.Tk):
             self.MKSvoltage.append(new_true_pressure)
             self.time.append(time.time())
             self.setPointVoltage.append(setpoint)
-            #self.flowSignalVoltage.append(flowSignal_unfiltered_avg)
+            self.flowSignalVoltage.append(flowSignal_unfiltered_avg)
             self.update_plot(start_time)
             if self.stop.is_set():
                 self.measure.clear()
@@ -166,20 +187,35 @@ class MFCWindow(tk.Tk):
         self.axes.clear()
         time_axis = np.array(self.time)-start_time
         kjlpressure = np.array(self.KJLvoltage)
-        #set_point = np.array(self.setPointVoltage)
-        #flow_signal = np.array(self.flowSignalVoltage)
+        set_point = np.array(self.setPointVoltage)
+        flow_signal = np.array(self.flowSignalVoltage)
         mkspressure = np.array(self.MKSvoltage)
 
         self.axes.plot(time_axis, kjlpressure, label = "KJL Voltage Output (V) [ai0]")
         self.axes.plot(time_axis, mkspressure, label = "MKS Voltage Output (V) [ai1]")
-        #self.axes.plot(time_axis, flow_signal, label = "MKS Flow Signal Voltage Output (V) [ai3]")
-        #self.axes.plot(time_axis, set_point, label = "Set Point Input (V) [ao1]")
+        self.axes.plot(time_axis, flow_signal, label = "MKS Flow Signal Voltage Output (V) [ai3]")
+        self.axes.plot(time_axis, set_point, label = "Set Point Input (V) [ao1]")
         self.axes.set_title('Discharge Plot')
         self.axes.set_ylabel('Pressure (Torr)')
         self.axes.set_xlabel('Time (s)')
         self.axes.legend()
 
         self.figure_canvas.draw()
+    
+    def control_valve(self, arg:str):
+        with self.daqLock:
+            match arg:
+                case 'vent':
+                    self.do_task.write([False,True],auto_start=True,timeout=3)
+                    return
+                case 'pump':
+                    self.do_task.write([True,False],auto_start=True,timeout=3)
+                    return
+                case 'stop':
+                    self.do_task.write([False,False],auto_start=True,timeout=3)
+                    return
+                case _:
+                    return
 
 
 
