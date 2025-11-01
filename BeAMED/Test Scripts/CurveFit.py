@@ -169,11 +169,7 @@ ax = fig.add_subplot(111)
 #Most recent lab data
 lab_data_5mm = pd.read_csv('./202565_N2_5mm.csv')
 lab_data_10mm = pd.read_csv('./2025612_N2_10mm.csv')
-<<<<<<< Updated upstream
-lab_data_old = pd.read_csv('C:/Users/gerows/Python/SAIL-Plasma/NelsonData.csv')
-=======
 lab_data_old = pd.read_csv('./NelsonData.csv')
->>>>>>> Stashed changes
 lab_data_2_5mm = pd.read_csv('./202572_N2_2_5.csv')
 lab_data_2_5mm = lab_data_2_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_5mm = lab_data_5mm.sort_values(by='p_MKS(Torr)')
@@ -185,15 +181,9 @@ v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkc
 v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
 
 
-<<<<<<< Updated upstream
-coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, color='xkcd:black')
-#coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, color='xkcd:red')
-#coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=True, show_stoletow=True, label_regions=True, color='xkcd:blue')
-=======
-#coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, label_regions = False, color='xkcd:black')
-#coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, label_regions = False, color='xkcd:red')
-coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=True, show_stoletow=True, label_regions=True, color='xkcd:blue')
->>>>>>> Stashed changes
+coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, label_regions=False, color='xkcd:black')
+coeffs_10mm = plot_fit(ax, p_d_10, v_10, left_knot_range=0.3, right_knot_range=0.3, label = '10mm', show_knots=False, show_stoletow=False, label_regions=False, color='xkcd:red')
+coeffs_2_5mm = plot_fit(ax, p_d_2_5, v_2_5, label = '2.5 mm',show_knots=False, show_stoletow=False, label_regions=False, color='xkcd:blue')
 
 #nelson data
 
@@ -208,17 +198,13 @@ nelsonp_d = np.array(nelsonp*nelsond)
 nelsonpd_err = nelson.iloc[:,11].values
 nelsonv_err = nelson.iloc[:,8].values
 
-<<<<<<< Updated upstream
-ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
-=======
 #ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
->>>>>>> Stashed changes
 
 #####
 
 #Theoretical Curve
-A = 15
-B = 365
+A = 6.152
+B = 68.557
 gg_low = 10**-2
 gg_high = 10**-1
 p_d_theory_low = np.linspace(0.31, 6, 1000)
@@ -226,18 +212,18 @@ p_d_theory_high = np.linspace(0.2, 6, 1000)
 Vcr_parallel_low = (B*p_d_theory_low)/np.log((A*p_d_theory_low)/np.log(1+(1/gg_low)))
 Vcr_parallel_high = (B*p_d_theory_high)/np.log((A*p_d_theory_high)/np.log(1+(1/gg_high)))
 #ax.fill_between(p_d_theory_high, Vcr_parallel_low, Vcr_parallel_high, label = 'SE32 Literature', alpha=0.2, color = 'xkcd:grey')
-#ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,600), xytext=(4.5, 600))
+#ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,200), xytext=(1.5, 100))
 
 
 #Theoretical curve with calculated A and B
-A_ion = 7.68 #from Nelson 2024
-B_ion = 366.69 #from Nelson 2024
-p_d_theory_low = np.linspace(0.61, 6, 1000)
-p_d_theory_high = np.linspace(0.32, 6, 1000)
+A_ion = 3.69 #from Nelson 2024
+B_ion = 211.10 #from Nelson 2024
+p_d_theory_low = np.linspace(1.3, 6, 1000)
+p_d_theory_high = np.linspace(0.7, 6, 1000)
 Vcr_parallel_low_i = (B_ion*p_d_theory_low)/np.log((A_ion*p_d_theory_low)/np.log(1+(1/gg_low)))
 Vcr_parallel_high_i = (B_ion*p_d_theory_high)/np.log((A_ion*p_d_theory_high)/np.log(1+(1/gg_high)))
-#ax.fill_between(p_d_theory_high, Vcr_parallel_low_i, Vcr_parallel_high_i, label = 'SE32 Ionization', alpha=0.2, color = 'xkcd:red')
-#ax.annotate(f'A = {A_ion}, B = {B_ion} gg [{gg_low},{gg_high}]',xy=(3.5,730), xytext=(3.5, 730))
+ax.fill_between(p_d_theory_high, Vcr_parallel_low_i, Vcr_parallel_high_i, label = 'SE32 Ionization', alpha=0.2, color = 'xkcd:red')
+ax.annotate(f'A = {A_ion}, B = {B_ion} gg [{gg_low},{gg_high}]',xy=(3.5,730), xytext=(3.5, 730))
 
 
 #Riousset Data
@@ -247,11 +233,16 @@ Vcr_spherical_lower = np.array([434.256,240.72,184.816,159.144,144.952,136.328,1
 Vcr_spherical_gg_upper = np.array([66.9804000000000,64.5027000000000,63.5136000000000,63.3347000000000,63.6388000000000,64.2491000000000,65.0624000000000,66.0148000000000,67.0649000000000,68.1847000000000,69.3548000000000,70.5614000000000,71.7945000000000,73.0467000000000,79.4403000000000,85.8560000000000,92.1840000000000,98.3920000000000,104.480000000000,110.448000000000,116.296000000000,122.048000000000,127.696000000000,133.264000000000,138.744000000000,144.144000000000,149.480000000000,154.744000000000,159.944000000000,165.088000000000,170.176000000000,175.216000000000,180.208000000000,185.144000000000])
 #ax.fill_between(p_d_riousset, Vcr_spherical_lower, Vcr_spherical_gg_upper, label = 'R24 Spherical', alpha = 0.2, color = 'xkcd:green')
 #Riousset Spherical Nelson A,B
-p_d_riousset_ion = np.concatenate([np.arange(0.7,2.1,0.1),np.arange(2,13,0.5)])*0.5
+p_d_riousset_ion = np.concatenate([np.arange(1.5,2,0.1),np.arange(1.5,13,0.5)])
+print(p_d_riousset_ion)
 Vcr_spherical_lower_nelson = np.array([2193.60302446715,1304.06161213306,1015.60163467471,876.029736986455,795.628429812578,744.615918971802,710.272331457175,686.259908399964,669.071215283745,656.610914634398,647.552108095922,641.014988020536,636.394072861376,633.259651480286,633.259651480286,631.282833001172,641.083644451862,656.105556259409,673.765447608646,692.858250519641,712.754555401458,733.098457376642,753.676886005397,774.356920925375,795.053195398290,815.709821778234,836.289835009447,856.768759171871,877.130546333100,897.364936557321,917.465698902416,937.429434753173,957.254749242093,976.941668917791,996.491227307052,1015.90516686331])
 Vcr_spherical_upper_nelson = np.array([362.608251490100,344.811029930721,335.232152019294,330.187499304187,327.883664027073,327.347989809217,328.009956515484,329.514325402676,331.629209532965,334.197319238270,337.108510056209,340.283549352715,343.664115840703,347.206420567142,347.206420567142,366.398917653132,386.747178178558,407.418302082329,428.074567792542,448.566916704865,468.828663213330,488.832300644868,508.569945589218,528.043784243930,547.261145183916,566.231860544790,584.966818834404,603.477163276638,621.773850501301,639.867414794494,657.767851235084,675.484567951504,693.026378359467,710.401516070511,727.617662093408,744.681978085533])
 #ax.fill_between(p_d_riousset_ion, Vcr_spherical_lower_nelson, Vcr_spherical_upper_nelson, label = 'R24 Spherical Ion', alpha = 0.2, color = 'xkcd:blue')    
-
+#Riousset Cylindrical A=3.69, B=211.10
+#first 8 terms are identical to make it a cleaner fill, they come from the lower gg value as the higher one goes to negative voltages sooner
+Vcr_spherical_lower_1024 = np.array([483.240000000000,353.296000000000,288.968000000000,250.888000000000,225.936000000000,208.480000000000,208.480000000000,167.936000000000,154.680000000000,149.944000000000,148.880000000000,149.696000000000,151.584000000000,154.120000000000,157.064000000000,160.280000000000,163.672000000000,167.192000000000,170.792000000000,174.440000000000,178.128000000000,181.840000000000,185.560000000000,189.280000000000,193,196.712000000000,200.408000000000,204.096000000000])
+Vcr_spherical_upper_1024 = np.array([483.240000000000,353.296000000000,288.968000000000,250.888000000000,225.936000000000,208.480000000000,208.480000000000,167.936000000000,759.560000000000,472.520000000000,381.416000000000,339.040000000000,316.016000000000,302.600000000000,294.608000000000,289.968000000000,287.520000000000,286.592000000000,286.744000000000,287.680000000000,289.216000000000,291.200000000000,293.536000000000,296.152000000000,298.984000000000,301.992000000000,305.144000000000,308.408000000000])
+ax.fill_between(p_d_riousset_ion, Vcr_spherical_lower_1024, Vcr_spherical_upper_1024, label = 'R24 Spherical A=3.69, B=211.10', alpha = 0.2, color = 'xkcd:blue')
 
 #Riousset Cylindrical literature A,B
 p_d_riousset_cyl = np.concatenate([np.arange(0.4,2.1,0.1),np.arange(2,13,0.5)])*0.5
@@ -262,6 +253,11 @@ Vcr_cylindrical_upper = np.array([97.6495534122478,93.5289987932898,93.865222716
 Vcr_cylindrical_upper_nelson = np.array([315.588739514879,205.047740002358,175.583446800180,164.285685079692,159.866218127866,158.736951865010,159.407633986174,161.151887395015,163.575517692923,166.447437056412,169.624079373878,173.012139141636,176.548762225668,180.190361513249,183.905984307428,187.673214969549,191.475554825681,191.475554825681,210.673689741230,229.751970944106,248.486739694499,266.827219102656,284.777775996878,302.360735930766,319.603218217493,336.532246396328,353.172984598970,369.548217891851,385.678333591494,401.581494944075,417.273875664360,432.769899567795,448.082462919511,463.223132015618,478.202315062622,493.029410139050,507.712931975110,522.260620439055,536.679533431112])
 Vcr_cylindrical_lower_nelson = np.array([-198.588635239434,-543.514922907131,-76951.1032752973,901.090078958674,545.349248604213,431.854037841349,378.370232824279,348.737301692734,330.948930211967,319.875325799766,312.959263916410,308.784654828297,306.504928861357,305.583579185243,305.664603566498,306.502833134537,307.924174046653,307.924174046653,320.291462252566,336.957036984160,355.291053939675,374.285708408553,393.494291402584,412.701231758761,431.797768458718,450.728585165491,469.466643844964,488.000449101127,506.327245432906,524.449229024798,542.371370109224,560.100131603022,577.642703369283,595.006541236634,612.199090079402,629.227619936765,646.099132390569,662.820310921716,679.397498836684])
 #ax.fill_between(p_d_riousset_cyl[3:], Vcr_cylindrical_lower_nelson[3:], Vcr_cylindrical_upper_nelson[3:], label = 'R24 Cylindrical Ion', alpha = 0.2, color = 'xkcd:green')
+#Riousset Cylindrical A=3.69, B=211.10
+#again getting first 8 terms to be identical for cleaner fill
+Vcr_cylindrical_lower_1024 = np.array([286.136000000000,210.120000000000,172.584000000000,150.448000000000,136.008000000000,125.968000000000,125.968000000000,103.160000000000,450.928000000000,283.560000000000,231.104000000000,207.216000000000,194.688000000000,187.784000000000,184.064000000000,182.312000000000,181.840000000000,182.256000000000,183.304000000000,184.808000000000,186.664000000000,188.776000000000,191.096000000000,193.576000000000,196.184000000000,198.888000000000,201.672000000000,204.520000000000])
+Vcr_cylindrical_upper_1024 = np.array([286.136000000000,210.120000000000,172.584000000000,150.448000000000,136.008000000000,125.968000000000,125.968000000000,103.160000000000,96.3520000000000,94.5440000000000,94.8800000000000,96.3120000000000,98.3760000000000,100.808000000000,103.472000000000,106.296000000000,109.216000000000,112.200000000000,115.232000000000,118.288000000000,121.352000000000,124.432000000000,127.512000000000,130.592000000000,133.656000000000,136.720000000000,139.768000000000,142.808000000000])
+ax.fill_between(p_d_riousset_ion, Vcr_cylindrical_lower_1024, Vcr_cylindrical_upper_1024, label = 'R24 Cylindrical A=3.69, B=211.10', alpha = 0.2, color = 'xkcd:orange')
 
 #Graph Appearence
 ax.set_title("Air Breakdown with 0.8 cm Diameter Steel Electrode", fontsize = 18)
