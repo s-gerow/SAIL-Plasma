@@ -76,7 +76,10 @@ class DAQDeviceWindow():
         self.dataframe[name] = pd.Series()
 
     def add_analog_output():
+        pass
         
     def add_digital_input():
+        pass
 
     def add_digital_output():
+        pass
