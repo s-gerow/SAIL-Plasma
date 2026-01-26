@@ -50,7 +50,7 @@ class Experiment():
         #the pressure range is for storing the np.linspace which is created to store the experiment series pressure values. This is iterated to adjust pressures for each test in a series
         #experiment run values is where the experimental data is internally saved before being converted to a dataframe and sent to csv
         
-        self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_MKS(Torr)', 'p_KJL(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p_MKS)', 'd(p_KJL)', 'd(d)', 'd(pd_KJL)', 'd(pd_MKS)']
+        self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_MKS(Torr)', 'p_KJL(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p_MKS)', 'd(p_KJL)', 'd(d)', 'd(pd_KJL)', 'd(pd_MKS)', 'dV(V)']
         self.experimentOutputDataFrame = pd.DataFrame(columns=self.ExperimentOutputHeader)
         self.pressure_range = None
         self.ExperimentRunValues = [[]] 
@@ -368,6 +368,8 @@ class Experiment():
                         text = "Rough Pressure (Torr)").grid(row=4, column=0)
         tk.Label(experimentOutputFrame,
                         text = "Fine Pressure (Torr)").grid(row=5, column=0)
+        tk.Label(experimentOutputFrame,
+                        text = "Delta V (V)").grid(row = 6, column = 0)
         self.PS_voltage_var = tk.DoubleVar()
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
@@ -404,7 +406,11 @@ class Experiment():
                         to = 800,
                         textvariable=self.fine_pressure_var
                         ).grid(row=5, column=1)
-        
+        self.deltaV = tk.DoubleVar()
+        tk.Spinbox(experimentOutputFrame,
+                   from_= 0,
+                   to =800,
+                   textvariable=self.deltaV).grid(row=6, column=1)
         #laura add voltage reading boxes here.
         
         tk.Label(experimentOutputFrame, text="Save to:").grid(column=2, row=0)
@@ -809,7 +815,7 @@ class Experiment():
             
             #get target pressure
             #set min pressure always 20mTorr
-            min_pressure = 0.040
+            min_pressure = 0.030
             #measure pressure drop until at min pressure
             with self.tk_lock:
                 true_pressure = float(self.rough_pressure_var.get())
@@ -854,7 +860,7 @@ class Experiment():
                         with self.tk_lock:
                             true_pressure = float(self.rough_pressure_var.get())
                         if true_pressure < .2 and diffusionPumpOn == False:
-                            proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 100mTorr, please plug in the diffusion pump to reach lower pressure")
+                            proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 200mTorr, please plug in the diffusion pump to reach lower pressure")
                             if proceed == False:
                                 print("stopping, refusal to turn on diffusion pump, cannot continue")
                                 self.StopALL.set()
@@ -866,7 +872,7 @@ class Experiment():
                         daq_DO.task.write([False, False], auto_start=True, timeout=3)
                     proceed = False
                     while proceed == False:
-                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 30mTorr, please unplug the diffusion pump to continue")
+                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 40mTorr, please unplug the diffusion pump to continue")
                     if proceed == True:
                         diffusionPumpOn = False
                     while true_pressure < target_pressure:
@@ -875,12 +881,10 @@ class Experiment():
                         print(flowRate)
                         time.sleep(0.1)
                         with self.tk_lock:
-                            true_pressure = float(self.rough_pressure_var.get())
+                            true_pressure = float(self.fine_pressure_var.get())
                         if(self.StopALL.is_set()):
                             return
-                    
-                    with self.daq_lock:
-                        flowRate = self.run_MFC(0)    
+                    flowRate = self.run_MFC(0)    
                     self.isTargetPressure.set()
                     return 
         finally:
@@ -958,6 +962,8 @@ class Experiment():
         voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
         while self.isDischargeTriggered.is_set() == False:
+            with self.tk_lock:
+                v0 = self.voltage_out_var.get()
             self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
             self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             if(self.isDischargeTriggered.is_set()):
@@ -969,7 +975,11 @@ class Experiment():
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
                 return
             init_v += voltage_step
-            time.sleep(3)
+            time.sleep(2)
+            with self.tk_lock:
+                v1 = self.voltage_out_var.get()
+                self.deltaV.set(v0-v1)
+            time.sleep(2)
         self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
         self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
         self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
@@ -1031,7 +1041,7 @@ class Experiment():
         self.isDischargeSaved.set()
 
     def save_experiment_to_local(self):
-        current_run = ["NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN", "NaN", "NaN"]
+        current_run = ["NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN", "NaN", "NaN", "NaN"]
         dt = datetime.now()
         dp_rough = float(self.rough_pressure_var.get())*0.1
         dp_fine = float(self.fine_pressure_var.get())*0.005 if float(self.fine_pressure_var.get()) < 1 else float(self.fine_pressure_var.get())*0.0025
@@ -1050,7 +1060,8 @@ class Experiment():
         current_run[12] = 0.05 #uncertainty in distance +/- half a mm from ruler measurement
         current_run[13] = (float(self.rough_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_rough/float(self.rough_pressure_var.get()))+(0.05/float(self.electrode_pos_var.get()))) #kurt J lesker d(pd)
         current_run[14] = (float(self.fine_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_fine/float(self.fine_pressure_var.get()))+(0.05/float(self.electrode_pos_var.get()))) #MKS d(pd)
-        
+        current_run[15] = self.deltaV.get()
+
         self.ExperimentRunValues[0] = current_run
         newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
         self.experimentOutputDataFrame = pd.concat([newdataframe, self.experimentOutputDataFrame])
@@ -1064,7 +1075,7 @@ class Experiment():
         print(self.experimentOutputDataFrame)
 
     def save_to_new(self):
-        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_{self.gas_type.get()}_{self.electrode_pos_var}mm.csv"
+        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_{self.gas_type.get()}_{self.electrode_pos_var.get()}mm.csv"
         try:
             self.experimentOutputDataFrame.to_csv(filename, mode='x', index=False)
             self.SaveFileType = "CSV"

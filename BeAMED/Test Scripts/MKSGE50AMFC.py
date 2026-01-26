@@ -39,8 +39,8 @@ class MFCWindow(tk.Tk):
         self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai0", name_to_assign_to_channel= "KJLPressure", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
         self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai1", name_to_assign_to_channel= "MKSPressure", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
         self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai3", name_to_assign_to_channel="FlowSignalInput", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
-        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="ValveOpen")
-        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="ValveClose")
+        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="ValveOpen")
+        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="ValveClose")
 
 
         #set input settings
