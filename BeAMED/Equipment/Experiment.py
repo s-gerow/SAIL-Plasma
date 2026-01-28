@@ -10,8 +10,7 @@ import pandas as pd
 import os
 import importlib.util
 import sys
-from VisaDevice import *
-from DAQDevice import *
+from Devices import DAQDevice, VisaDevice, VisaDeviceFrame, DAQDeviceFrame
 
 
 
@@ -25,7 +24,6 @@ class experimentWindow(tk.Tk):
         self.equipmentDict = {}
         if fullscreen:
             self.geometry("%dx%d" % (self.winfo_screenwidth(),self.winfo_screenheight()))
-
         self.rm = pyvisa.ResourceManager()
         self.menuBar = tk.Menu(self)
         self.fileMenu = tk.Menu(self, tearoff=0)
@@ -46,7 +44,7 @@ class experimentWindow(tk.Tk):
         '''
         return self.rm.open_resource(resource_name=inst)
     
-    def add_equipment(self, instrument: VisaDeviceWindow | DAQDeviceWindow):
+    def add_equipment(self, instrument: VisaDeviceFrame | DAQDeviceFrame):
         '''
         Adds the equipment frame of a given Visa or DAQ instrument
         '''
@@ -56,7 +54,7 @@ class experimentWindow(tk.Tk):
     
 
 if __name__ == "__main__":
-    #Automatically creates chamebr app and imports experiment
+    #Automatically creates chamber app and imports experiment
     #For this to work you will need to write in the file location of the current file as well as the file location of the configuration files
-    chamber = experimentWindow()
+    chamber = experimentWindow(title='test gui', fullscreen = True)
     chamber.mainloop()
