@@ -18,8 +18,8 @@ matplotlib.use('TkAgg')
 #https://www.geeksforgeeks.org/on-off-toggle-button-switch-in-tkinter/
 
 #Initialize Visa Resource Manager
-rm = pyvisa.ResourceManager()
-DMM = rm.open_resource('USB0::0x05E6::0x6500::04386498::INSTR')
+#rm = pyvisa.ResourceManager()
+#DMM = rm.open_resource('USB0::0x05E6::0x6500::04386498::INSTR')
 
 root = tk.Tk()
 root.title = ('On/Off Switch')

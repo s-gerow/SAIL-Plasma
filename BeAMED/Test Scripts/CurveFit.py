@@ -172,14 +172,29 @@ lab_data_5mm = pd.read_csv('./202565_N2_5mm.csv')
 lab_data_10mm = pd.read_csv('./2025612_N2_10mm.csv')
 lab_data_old = pd.read_csv('./NelsonData.csv')
 lab_data_2_5mm = pd.read_csv('./202572_N2_2_5.csv')
+nelsonAr_data = pd.read_csv('./Nelson2024Argon.csv')
 lab_data_2_5mm = lab_data_2_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_5mm = lab_data_5mm.sort_values(by='p_MKS(Torr)')
 lab_data_10mm = lab_data_10mm.sort_values(by='p_MKS(Torr)')
 nelson = lab_data_old.sort_values(by='Pressure (Torr)')
+nelsonAr = nelsonAr_data.sort_values(by='Pressure (Torr)')
 
-#v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap", color = 'xkcd:black')
+#argon lab data
+argon_data_5mm = pd.read_csv('./2025115_Ar_5mm.csv')
+argon_data_5mm = argon_data_5mm.sort_values(by='p_MKS(Torr)')
+argon_data_10mm = pd.read_csv('./2025115_Ar_10mm.csv')
+argon_data_10mm = argon_data_10mm.sort_values(by='p_MKS(Torr)')
+
+#Ar
+#v_ar_5, pd_ar_5 = plot_data(ax, argon_data_5mm, label = "5mm Gap Ar", color = 'xkcd:red')
+v_ar_10, pd_ar_10 = plot_data(ax, argon_data_10mm, label = "10mm Gap Ar", color = 'xkcd:red')
+
+#coeffs_5mm_ar = plot_fit(ax, pd_ar_5, v_ar_5, label = '5mm Ar', show_knots=False, show_stoletow=False, label_regions=False,color='xkcd:red')
+
+#N2
+#v, p_d = plot_data(ax, lab_data_5mm, label = "5 mm Gap N2", color = 'xkcd:black')
 #v_2_5, p_d_2_5 = plot_data(ax, lab_data_2_5mm, label = "2.5mm Gap", color = 'xkcd:blue')
-v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:red')
+#v_10, p_d_10 = plot_data(ax, lab_data_10mm, label = "10mm Gap", mask_value=3.5, color='xkcd:black')
 
 
 coeffs_5mm = plot_fit(ax, p_d, v, label = '5 mm', show_knots=False, show_stoletow=False, label_regions=False, color='xkcd:black')
@@ -195,12 +210,20 @@ nelsond = nelson.iloc[:,7].values
 nelsonv = nelson.iloc[:,3].values
 nelsonp_d = np.array(nelsonp*nelsond)
 
+nelsonpar = nelsonAr.iloc[:,7].values
+nelsondar = nelsonAr.iloc[:,9].values
+nelsonvar = nelsonAr.iloc[:,3].values
+nelsonp_dar = np.array(nelsonpar*nelsondar)
+
 #Grabbing Errorbars
 nelsonpd_err = nelson.iloc[:,11].values
 nelsonv_err = nelson.iloc[:,8].values
 
-#ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
+nelsonpdar_err = nelsonAr.iloc[:,13].values
+nelsonvar_err = nelsonAr.iloc[:,10].values
 
+#ax.errorbar(nelsonp_d, nelsonv, yerr=nelsonv_err, xerr=nelsonpd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24", color = 'xkcd:red')
+#ax.errorbar(nelsonp_dar, nelsonvar, yerr=nelsonvar_err, xerr=nelsonpdar_err, fmt='.', capsize=4, markerfacecolor = 'none', label = "N24 Ar", color = 'xkcd:blue')
 #####
 
 #Theoretical Curve
@@ -214,8 +237,8 @@ p_d_theory_low = np.linspace(0.31, 6, 1000)
 p_d_theory_high = np.linspace(0.2, 6, 1000)
 Vcr_parallel_low = (B*p_d_theory_low)/np.log((A*p_d_theory_low)/np.log(1+(1/gg_low)))
 Vcr_parallel_high = (B*p_d_theory_high)/np.log((A*p_d_theory_high)/np.log(1+(1/gg_high)))
-ax.fill_between(p_d_theory_high, Vcr_parallel_low, Vcr_parallel_high, label = 'SE32', alpha=0.2, color = 'xkcd:grey')
-ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,600), xytext=(4.5, 600))
+#ax.fill_between(p_d_theory_high, Vcr_parallel_low, Vcr_parallel_high, label = 'SE32', alpha=0.2, color = 'xkcd:grey')
+#ax.annotate(f'A = {A}, B = {B} gg [{gg_low},{gg_high}]',xy=(4.5,600), xytext=(4.5, 600))
 
 #Testing Riousset new numbers
 A_new = 6.1522
@@ -229,7 +252,7 @@ p_d_low = np.linspace(0.2,6,1000)
 Vcr10 = (B10*p_d_low)/np.log((A_new*p_d_low)/np.log(1+(1/gg10)))
 Vcr5 = (B5*p_d_low)/np.log((A_new*p_d_low)/np.log(1+(1/gg5)))
 Vcr25 = (B25*p_d_low)/np.log((A_new*p_d_low)/np.log(1+(1/gg25)))
-ax.plot(p_d_low, Vcr10,label=f"A={A_new}, B={B10},gg={gg10}")
+#ax.plot(p_d_low, Vcr10,label=f"A={A_new}, B={B10},gg={gg10}")
 
 #Theoretical curve with calculated A and B
 A_ion = 3.69 #from Nelson 2024
@@ -281,9 +304,10 @@ ax.fill_between(p_d_riousset_ion, Vcr_cylindrical_lower_1024, Vcr_cylindrical_up
 
 #Graph Appearence
 ax.set_title("Air Breakdown with 0.8 cm Diameter Steel Electrode", fontsize = 18)
-ax.set_ylim([100, 2500])
+#ax.set_ylim([100, 1000])
 ax.set_xlabel(r'$pd~{\rm (cm\cdot Torr)}$', fontsize = 18)
 ax.set_ylabel(r'$V_{\rm cr}~{\rm (V)}$', fontsize = 18)
+#ax.set_xscale('log')
 ax.minorticks_on()
 ax.tick_params(axis='both', which = 'major', labelsize=16)
 ax.legend(loc="lower right", frameon=False)
