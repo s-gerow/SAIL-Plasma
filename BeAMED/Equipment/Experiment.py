@@ -1,16 +1,4 @@
-import pyvisa
-import tkinter as tk
-from tkinter import ttk
-from tkinter import filedialog as fd
-from tkinter import messagebox
-import time
-from threading import Thread, Event, Lock
-import numpy as np
-import pandas as pd
-import os
-import importlib.util
-import sys
-from Devices import DAQDevice, VisaDevice, VisaDeviceFrame, DAQDeviceFrame
+from Devices import *
 
 
 
@@ -22,6 +10,7 @@ class experimentWindow(tk.Tk):
     def __init__(self, title = "untitled experiment window", fullscreen = False):
         super().__init__(className = title)
         self.equipmentDict = {}
+        self.frameDict = {}
         if fullscreen:
             self.geometry("%dx%d" % (self.winfo_screenwidth(),self.winfo_screenheight()))
         self.rm = pyvisa.ResourceManager()
@@ -44,11 +33,20 @@ class experimentWindow(tk.Tk):
         '''
         return self.rm.open_resource(resource_name=inst)
     
-    def add_equipment(self, instrument: VisaDeviceFrame | DAQDeviceFrame):
+    def add_equipment(self, instrument: VisaDevice | DAQDevice):
         '''
         Adds the equipment frame of a given Visa or DAQ instrument
         '''
-        self.equipmentDict[instrument.getName()] = instrument
+        instrumentName = instrument.getName()
+        self.equipmentDict[instrumentName] = instrument
+        print(f"added {instrument} to instrument list as: {instrumentName}")
+        if isinstance(instrument, VisaDevice):
+            self.frameDict[instrumentName] = VisaDeviceFrame(self, device = instrument)
+        elif isinstance(instrument, DAQDevice):
+            self.frameDict[instrumentName] = DAQDeviceFrame(self, instrument)
+        self.frameDict[instrumentName].pack()
+        instrument.create_widgets(self.frameDict[instrumentName].instrumentFrame)
+
 
     
     

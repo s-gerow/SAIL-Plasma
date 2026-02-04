@@ -1,13 +1,48 @@
-import nidaqmx
-import pyvisa
-import numpy as np
+import sys
+import subprocess
+import importlib.metadata
 import tkinter as tk
+from tkinter.dialog import Dialog
 from tkinter import ttk
-import nidaqmx
+from tkinter import filedialog as fd
+from tkinter import messagebox
+import time
+from datetime import datetime
+import threading
+from threading import Thread, Event, Lock
+import logging
+import os
+import csv
+import importlib.util
 from typing import Literal
-import nidaqmx.constants
+
+
+# Define additional required packages
+required = {'pyvisa', 'matplotlib', 'numpy', 'nidaqmx', 'pandas', 'openpyxl'}
+# Get installed packages
+installed = {pkg.metadata['Name'].lower() for pkg in importlib.metadata.distributions()}
+# Find missing packages
+missing = required - installed
+if missing:
+    # Upgrade pip
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip'])
+    # Install missing packages
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])
+
+
+#Interface for Plasma Chamber
+import pyvisa
+import matplotlib
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+import numpy as np
+import nidaqmx
+from nidaqmx.constants import TerminalConfiguration, AcquisitionType
+import openpyxl as op
 import pandas as pd
 
+#Matplotlib Config
+matplotlib.use('TkAgg')
 
 class Device():
     '''
@@ -15,6 +50,12 @@ class Device():
     query, write, open, and close functions.
     '''
     def __init__(self, name: str):
+        self.name = name
+    
+    def getName(self):
+        return self.name
+    
+    def setName(self, name: str):
         self.name = name
 
     def open(self):
@@ -35,7 +76,7 @@ class Device():
             f"Method write() is not implemented for device of class {type(self)}"
         )
 
-    def query(self):
+    def read(self):
         '''self.query is not enabled for this class and must be overwritten by child classes to be used'''
         raise NotImplementedError(
             f"Method query() is not implemented for device of class {type(self)}"
@@ -216,26 +257,120 @@ class DAQDevice():
         '''
         return function(self.tasks[task], *args, **kwargs)
         
-class VisaDevice():
+class VisaDevice(Device):
     '''
     Base class for VISA devices
     '''
-    def __init__(self, parent:tk.Tk, inst:str, title = "untitled visa device"):
+    def __init__(self, parent:tk.Tk, manager: pyvisa.ResourceManager, inst:str, title = "untitled visa device", auto_import_configurations = False, configuration_file: str = None):
+        super().__init__(name=title)
         self.parentWindow = parent
-        self.name = title
+        self.resourceManager = manager
+        self.instrumentID = inst
+        self.configOptions = {}
+        self.configFile = None
+        self.state = False #True = open, False = close. Can be verified with list_opened resources.
+        self.resource = None
 
-    def getName(self):
-        return self.name
+        if auto_import_configurations and configuration_file != None:
+            self.setConfigsFromFile(configuration_file)
+        elif auto_import_configurations and configuration_file == None:
+            configuration_file = fd.askopenfilename()
+            self.setConfigsFromFile(configuration_file)
     
-    def setName(self, name: str):
-        self.name = name
+    def open(self):
+        if self.state:
+            print("cannot open when device is already open")
+        else:
+            print("opening...")
+            self.resource = self.resourceManager.open_resource(self.instrumentID)
+            if self.resource in self.resourceManager.list_opened_resources():
+                print("Device Successfully Opened")
+                self.state = True
+    
+    def close(self):
+        if self.state:
+            self.resource.close()
+            if self.resource in self.resourceManager.list_opened_resources():
+                print("Failed to close resource")
+            else:
+                print("Resource Successfully Closed")
+                self.state = False
+        
+    def identify(self):
+        if self.instrumentID in self.resourceManager.list_resources():
+            print(self.resourceManager.list_resources(self.instrumentID)[0])
+            return self.resourceManager.list_resources(self.instrumentID)[0]
+        else:
+            raise NameError(
+                f"Instrument with ID {self.instrumentID} not found. Implementation to choose new ID is not yet available."
+            )
+    
+    def getConfigOption(self, option = None):
+        '''VisaDevice.configure() prints the configurations stored in the dictionary'''
+        if option == None:    
+            configArray = np.array([])
+            for config, value in self.configOptions.items():
+                print(f"config: {config} | value: {value[0]} | range: {value[1]}")
+                configArray = np.concat([[value[0], value[1]]])
+            return configArray
+        else:
+            return np.array([self.configOptions[option]])
+
+    def setConfigs(self, config_name, value):
+        '''VisaDevice.setConfiguration(config_name, value) changes the value of a given configuration which already exists to the parameter value'''
+        raise NotImplementedError(
+            f"Method is not implemented for device of class {type(self)}"
+        )
+
+    def setConfigsFromFile(self, config_file: str):
+        '''VisaDevice.new_configurations uses a configuration text file of the correct format to set the configuration options attribute to the given settings.'''
+        with open(config_file, 'r') as f:
+            for i, row in enumerate(csv.reader(f,delimiter='\t')):
+                if i == 0:
+                    continue
+                config_name = row[0]
+                default_value = row[1]
+                range = row[2]
+                self.configOptions.__setitem__(config_name,[default_value,range])
+
+class VisaDeviceFrame(ttk.LabelFrame):
+    '''
+    Frame for displaying VISA device information
+    '''
+    def __init__(self, parent: tk.Tk, device: VisaDevice, text = None):
+        self.device = device
+        super().__init__(parent, text=self.device.getName())
+        self.device = device
+        self.instrumentFrame = tk.Frame(self)
+        self.create_widgets()
+
+
+    def create_widgets(self):
+        '''self.create_widgets is not enabled for this class and must be overwritten by child classes to be used'''
+        instrumentInitFrame = tk.Frame(self)
+        instrumentInitFrame.pack(side='top', fill = 'x')
+        self.instrumentFrame.pack(side='top', fill = 'both')
+
+        tk.Button(instrumentInitFrame, text="Identify Instrument", command=lambda: instrumentNameVar.set(self.device.identify())).grid(row=0, column=0)
+        instrumentNameVar = tk.StringVar()
+        tk.Spinbox(instrumentInitFrame, textvariable=instrumentNameVar, state='readonly').grid(row=0, column=1)
+        tk.Button(instrumentInitFrame, text="Open Instrument", command = self.device.open).grid(row=0,column=2)
+        tk.Button(instrumentInitFrame, text="Close Instrument", command=self.device.close).grid(row=0,column=3)
+
+
+
+class DAQDeviceFrame(ttk.Frame):
+    '''
+    Frame for displaying DAQ Device information
+    '''
+    pass
 
 class keithleyDMM6500(VisaDevice):
     '''
     Keithley DMM6500 Digital Multimeter
     '''
     def __init__(self, parent: tk.Tk, inst = "USB0::0x05E6::0x6500::04386498::INSTR", title="Keithley DMM6500"):
-        super().__init__(parent, inst, title)
+        super().__init__(self, parent, inst, title)
 
 class keithley2260B(VisaDevice):
     '''
@@ -253,22 +388,116 @@ class siglentSDS1204X_E(VisaDevice):
     '''
     Siglent SDS1204X-E Oscilloscope
     '''
-    pass
+    def __init__(self, parent: tk.Tk, manager: pyvisa.ResourceManager, inst = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR", title="Siglent SDS1204X-E", auto_import_configurations = False, configuration_file: str = None):
+        super().__init__(parent, manager=manager, inst= inst, title = title, auto_import_configurations=auto_import_configurations, configuration_file=configuration_file)
 
-class VisaDeviceFrame(ttk.Frame):
-    '''
-    Frame for displaying VISA device information
-    '''
-    def __init__(self, parent: tk.Tk, device: VisaDevice):
-        super().__init__(parent)
-        self.device = device
-        self.create_widgets()
 
-    def create_widgets(self):
-        self.label = ttk.Label(self, text=f"Device: {self.device.getName()}")
-        self.label.pack()
+    def create_widgets(self, frame: ttk.Frame|ttk.LabelFrame,):
+        configFrame = tk.Frame(frame)
+        configFrame.grid(row=0, column=0, rowspan=2)
+        plotFrame = tk.Frame(frame)
+        plotFrame.grid(row=0, rowspan=2, column=1, columnspan=2)
+        buttonFrame = tk.Frame(frame)
+        buttonFrame.grid(row=2, column=1, columnspan=2)
 
-class DAQDeviceFrame(ttk.Frame):
-    '''
-    Frame for displaying DAQ Device information
-    '''
+        figure = Figure(dpi=75)
+        self.figure_canvas = FigureCanvasTkAgg(figure, plotFrame)
+        NavigationToolbar2Tk(self.figure_canvas, plotFrame).pack(side='top')
+        self.axes = figure.add_subplot()
+        self.axes.set_title('Oscilloscope')
+        self.axes.set_ylabel('Voltage')
+        self.axes.set_xlabel('Time')
+        self.figure_canvas.get_tk_widget().pack(side='top')
+        
+        tk.Button(buttonFrame, text="Save Plot", command = self.savePlot).grid(row=0, column=0)
+        tk.Button(buttonFrame, text="Grab Plot", command=self.getPlot).grid(row=0, column=1)
+
+    def savePlot(self):
+        print("saving plot...")
+        print("nothing happened, this function is not completed")        
+
+    def getPlot(self):
+        print("getting current plot from oscilloscope")
+        self.axes.clear()
+        self.resource.write("CHDR OFF")
+        self.resource.write('DATASOURCE CHANNEL2')
+        self.resource.write('DATA:ENCDG SRI')
+        self.resource.write('DATA:WIDTH 2')
+        self.resource.write('DATA:START 0')
+        self.resource.write('DATA:STOP 1000')
+        
+        sample_rate = self.resource.query("SARA?")
+        time_inter = 1/float(sample_rate)
+        tdiv = float(self.resource.query("TDIV?"))
+        offset = float(self.resource.query("C1:OFST?"))
+        vdiv = float(self.resource.query("C1:VDIV?"))
+        self.resource.write("C1:WF? DAT2")
+        wf = self.resource.read_raw()
+        wf = wf[16:-2]
+
+        hgrid = 14
+
+        decimal = []
+        for i,byte in enumerate(wf):
+            decimal.append(int.from_bytes(wf[i:i+1], byteorder=sys.byteorder))
+        data = np.array(decimal)
+        time = np.flip(np.array([(tdiv*hgrid)-(idx*time_inter) for idx in range(0,data.size) ]))
+
+        voltage_data = np.array([int(code)*(vdiv/25)-offset if int(code) < 127 else (int(code)-256)*(vdiv/25)-offset for code in data])
+
+        self.axes.plot(time, voltage_data)
+        self.axes.set_title('Discharge Plot')
+        self.axes.set_ylabel('Voltage (V)')
+        self.axes.set_xlabel('Time (s)')
+
+        self.figure_canvas.draw()
+
+    # def readOsc(self):
+    #     self.Osc.open_device()
+        
+    #     while(self.isExperimentStarted.is_set()& self.isDischargeTriggered.is_set() == False):
+    #         VPP = self.Osc.resource.query(f"{self.Osc.options['Channel'][0]}:PARAMETER_VALUE? PKPK")
+    #         if VPP[5:-1] == "****":
+    #             VPP_num = 0
+    #         else:
+    #             VPP_num = float(VPP[5:-1])
+    #         if VPP_num > 0:
+    #             self.t_trigger = time.time()
+    #             self.isDischargeTriggered.set()
+    #             self.triggered_var.set(1)
+
+    #             self.Osc.resource.write("STOP")
+    #             self.log_message("OSC", "INFO", "Discharge Detected")
+    #             self.osc_plot()
+    #             self.Osc.close_device()
+    #             return
+    #         if(self.StopALL.is_set()):
+    #             self.log_message("OSC", "WARN", "Stop All Detected. Quitting...")
+    #             return
+    #     self.Osc.close_device()
+    #     time.sleep(5)
+        
+
+        # def configureOscilloscope(self, oscName):
+        # thread = "CFG-OSC"
+        # level = "INFO"
+        # self.log_message(thread, level, f"configuring{oscName}")
+        # self.Osc = self.parent.devices[oscName][0]
+        
+        # self.Osc.open_device()
+        # if self.Osc.options['Reset'][0] == "True":
+        #     self.Osc.resource.write("*RST")
+        # self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:ATTN {self.Osc.options['Attenuation'][0]}")
+        # self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:OFST {self.Osc.options['Vertical Offset'][0]}")
+        # self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:VDIV {self.Osc.options['Voltage Division'][0]}")
+        # self.Osc.resource.write(f"TDIV {self.Osc.options['Time Division'][0]}")
+        # self.Osc.resource.write(f"HPOS {self.Osc.options['Horizontal Position'][0]}")
+        # self.Osc.resource.write(f"TRMD {self.cont_acq}")
+        # self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:TRSL {self.Osc.options['Trigger Slope'][0]}")
+        # self.Osc.resource.write(f"TRSE EDGE,SR,{self.Osc.options['Channel'][0]},HT,TI,HV,{self.Osc.options['Holdoff'][0]}")
+        # self.Osc.resource.write(f"{self.Osc.options['Channel'][0]}:TRLV {self.Osc.options['Trigger Level'][0]}")
+        # self.Osc.resource.write("CHDR OFF")
+        # self.Osc.close_device()
+        # self.log_message(thread, level, f"{oscName} Successfully Configured")
+        # self.isOscConfigured.set()
+        
