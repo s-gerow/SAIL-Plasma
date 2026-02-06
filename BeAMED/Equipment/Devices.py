@@ -332,6 +332,11 @@ class VisaDevice(Device):
                 default_value = row[1]
                 range = row[2]
                 self.configOptions.__setitem__(config_name,[default_value,range])
+    
+    def configureDevice(self):
+        raise NotImplementedError(
+            f"Method is not implemented for device of class {type(self)}"
+        )
 
 class VisaDeviceFrame(ttk.LabelFrame):
     '''
@@ -346,7 +351,7 @@ class VisaDeviceFrame(ttk.LabelFrame):
 
 
     def create_widgets(self):
-        '''self.create_widgets is not enabled for this class and must be overwritten by child classes to be used'''
+        ''''''
         instrumentInitFrame = tk.Frame(self)
         instrumentInitFrame.pack(side='top', fill = 'x')
         self.instrumentFrame.pack(side='top', fill = 'both')
@@ -356,8 +361,6 @@ class VisaDeviceFrame(ttk.LabelFrame):
         tk.Spinbox(instrumentInitFrame, textvariable=instrumentNameVar, state='readonly').grid(row=0, column=1)
         tk.Button(instrumentInitFrame, text="Open Instrument", command = self.device.open).grid(row=0,column=2)
         tk.Button(instrumentInitFrame, text="Close Instrument", command=self.device.close).grid(row=0,column=3)
-
-
 
 class DAQDeviceFrame(ttk.Frame):
     '''
@@ -390,7 +393,6 @@ class siglentSDS1204X_E(VisaDevice):
     '''
     def __init__(self, parent: tk.Tk, manager: pyvisa.ResourceManager, inst = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR", title="Siglent SDS1204X-E", auto_import_configurations = False, configuration_file: str = None):
         super().__init__(parent, manager=manager, inst= inst, title = title, auto_import_configurations=auto_import_configurations, configuration_file=configuration_file)
-
 
     def create_widgets(self, frame: ttk.Frame|ttk.LabelFrame,):
         configFrame = tk.Frame(frame)
@@ -452,30 +454,30 @@ class siglentSDS1204X_E(VisaDevice):
 
         self.figure_canvas.draw()
 
-    # def readOsc(self):
-    #     self.Osc.open_device()
+    def monitorTrigger(self):
+        self.resource.open()
         
-    #     while(self.isExperimentStarted.is_set()& self.isDischargeTriggered.is_set() == False):
-    #         VPP = self.Osc.resource.query(f"{self.Osc.options['Channel'][0]}:PARAMETER_VALUE? PKPK")
-    #         if VPP[5:-1] == "****":
-    #             VPP_num = 0
-    #         else:
-    #             VPP_num = float(VPP[5:-1])
-    #         if VPP_num > 0:
-    #             self.t_trigger = time.time()
-    #             self.isDischargeTriggered.set()
-    #             self.triggered_var.set(1)
+        while(self.isExperimentStarted.is_set()& self.isDischargeTriggered.is_set() == False):
+            VPP = self.Osc.resource.query(f"{self.Osc.options['Channel'][0]}:PARAMETER_VALUE? PKPK")
+            if VPP[5:-1] == "****":
+                VPP_num = 0
+            else:
+                VPP_num = float(VPP[5:-1])
+            if VPP_num > 0:
+                self.t_trigger = time.time()
+                self.isDischargeTriggered.set()
+                self.triggered_var.set(1)
 
-    #             self.Osc.resource.write("STOP")
-    #             self.log_message("OSC", "INFO", "Discharge Detected")
-    #             self.osc_plot()
-    #             self.Osc.close_device()
-    #             return
-    #         if(self.StopALL.is_set()):
-    #             self.log_message("OSC", "WARN", "Stop All Detected. Quitting...")
-    #             return
-    #     self.Osc.close_device()
-    #     time.sleep(5)
+                self.Osc.resource.write("STOP")
+                self.log_message("OSC", "INFO", "Discharge Detected")
+                self.osc_plot()
+                self.Osc.close_device()
+                return
+            if(self.StopALL.is_set()):
+                self.log_message("OSC", "WARN", "Stop All Detected. Quitting...")
+                return
+        self.Osc.close_device()
+        time.sleep(5)
         
 
         # def configureOscilloscope(self, oscName):
