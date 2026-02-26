@@ -178,7 +178,14 @@ class MFCWindow(tk.Tk):
             self.time.append(time.time())
             self.setPointVoltage.append(setpoint)
             self.flowSignalVoltage.append(flowSignal_unfiltered_avg)
-            self.update_plot(start_time)
+
+            # if len(self.time) > 600:
+            #     self.KJLvoltage.pop(0)
+            #     self.MKSvoltage.pop(0)
+            #     self.time.pop(0)
+            #     self.setPointVoltage.pop(0)
+            #     self.flowSignalVoltage.pop(0)
+            self.update_plot(self.time[0])
             if self.stop.is_set():
                 self.measure.clear()
                 return
@@ -193,11 +200,12 @@ class MFCWindow(tk.Tk):
 
         self.axes.plot(time_axis, kjlpressure, label = "KJL Voltage Output (V) [ai0]")
         self.axes.plot(time_axis, mkspressure, label = "MKS Voltage Output (V) [ai1]")
-        self.axes.plot(time_axis, flow_signal, label = "MKS Flow Signal Voltage Output (V) [ai3]")
-        self.axes.plot(time_axis, set_point, label = "Set Point Input (V) [ao1]")
+        #self.axes.plot(time_axis, flow_signal, label = "MKS Flow Signal Voltage Output (V) [ai3]")
+        #self.axes.plot(time_axis, set_point, label = "Set Point Input (V) [ao1]")
         self.axes.set_title('Discharge Plot')
         self.axes.set_ylabel('Pressure (Torr)')
         self.axes.set_xlabel('Time (s)')
+        #self.axes.set_xlim(0, 30)
         self.axes.legend()
 
         self.figure_canvas.draw()

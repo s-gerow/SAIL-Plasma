@@ -56,6 +56,11 @@ class Experiment():
         self.ExperimentRunValues = [[]] 
         self.SaveFileType = None
         
+        # pressure change data
+        self.pressure_at_pressure_set = tk.DoubleVar()
+        self.time_at_pressure_set = tk.DoubleVar()
+        self.DeltaP = tk.DoubleVar()
+        self.Detlat = tk.DoubleVar()
 
         #_________________Experiment Events_________________________________________#
             #Each of these events represent an important benchmark in the setup of the experiment. 
@@ -745,6 +750,10 @@ class Experiment():
                 self.parent.after(1, lambda: self.fine_pressure_var.set(new_true_pressure))
                 if(self.isDischargeTriggered.is_set()):
                     self.isDischargeTriggered.pressure = new_true_pressure
+                    with self.tk_lock:
+                        self.DeltaP.set(self.isDischargeTriggered.pressure - float(self.pressure_at_pressure_set.get()))
+                        self.Detlat.set(time.time() - self.time_at_pressure_set.get())
+                        print(f'delta t = {self.Detlat.get()}   delta p = {self.DeltaP.get()}')
                     self.log_message("Pressure", "INFO", f"Discharge Triggered at ({new_true_pressure}/{old_true_pressure}) Torr (MKS/KJL)")
                     PressureSensors.task.close()
                     return
@@ -891,6 +900,10 @@ class Experiment():
             with self.daq_lock:
                 daq_DO.task.write([False, False], auto_start=True, timeout=3)
                 daq_DO.task.close()
+            with self.tk_lock:
+                true_pressure = float(self.fine_pressure_var.get())
+                self.pressure_at_pressure_set.set(true_pressure)
+                self.time_at_pressure_set.set(time.time())
         
     def moveFeedthrough(self, target):
         #x is electrode postion * 3200 revolutions
@@ -975,11 +988,11 @@ class Experiment():
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
                 return
             init_v += voltage_step
-            time.sleep(2)
-            with self.tk_lock:
-                v1 = self.voltage_out_var.get()
-                self.deltaV.set(v0-v1)
-            time.sleep(2)
+            time.sleep(3)
+            # with self.tk_lock:
+            #     v1 = self.voltage_out_var.get()
+            #     self.deltaV.set(v0-v1)
+            # time.sleep(2)
         self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
         self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
         self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
