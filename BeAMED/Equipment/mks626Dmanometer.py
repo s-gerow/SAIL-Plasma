@@ -1,4 +1,4 @@
-from ExperimentWindow import *
+from BeAMED.Equipment.Experiment import *
 
 if __name__ == "__main__":
     #Automatically creates chamebr app and imports experiment
