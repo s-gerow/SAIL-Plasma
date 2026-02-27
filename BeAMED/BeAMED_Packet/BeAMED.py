@@ -73,6 +73,7 @@ class Experiment():
         self.isTargetPressure = Event() #this is cleared at the beginning of the experiment trial and set when the setpressure fucntion is finished
         self.isFeedthroughset = Event() #this is cleared at the begining of the experiment trial and set when the feedthrough function finishes
         self.isExperimentStarted = Event() #when a new experimental trial is started this is set
+        self.isVoltageComplete = Event()
         self.isDischargeSaved = Event()
         self.isSaved = Event() #this is used to manage the experimental flow. Once a discharge is compelete, the system collects the data and saves it. Only then can a new test start.
         self.StopALL = Event()
@@ -816,6 +817,8 @@ class Experiment():
 
     def set_chamber_pressure(self):
         daq_DO = DAQDevice("Valve Control")
+        thread = 'SET_P'
+        level = 'INFO'
         with self.tk_lock:
             gas = self.gas_type.get()
         try:
@@ -839,6 +842,7 @@ class Experiment():
                         true_pressure = float(self.rough_pressure_var.get())
                     if(self.StopALL.is_set()):
                         return
+                self.log_message(thread, level, 'Reached Atmospheric Pressure')
                 with self.daq_lock:
                     daq_DO.task.write([False, False], auto_start=True, timeout=3)
                     #close both valves
@@ -897,6 +901,7 @@ class Experiment():
                     self.isTargetPressure.set()
                     return 
         finally:
+            self.log_message(thread, level, 'Closing Thread')
             with self.daq_lock:
                 daq_DO.task.write([False, False], auto_start=True, timeout=3)
                 daq_DO.task.close()
@@ -970,6 +975,7 @@ class Experiment():
     def increase_voltage(self, init_v: int, init_c: int):
         thread = "PWR"
         level = "INFO"
+        self.isVoltageComplete.clear()
         self.Pwr.open_device()
         self.Pwr.resource.write("OUTP:STAT:IMM ON")
         voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
@@ -1050,6 +1056,8 @@ class Experiment():
         self.axes.set_xlabel('Time (s)')
 
         self.figure_canvas.draw()
+        while not self.isVoltageComplete.is_set():
+            time.sleep(0.5)
         self.save_experiment_to_local()
         self.isDischargeSaved.set()
 
