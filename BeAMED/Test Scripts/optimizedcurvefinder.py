@@ -5,13 +5,12 @@ from scipy.optimize import minimize
 import matplotlib.animation as animation
 from CurveFit import unpack_coeffs, find_peicewise, fit_data, continuity_conditions, concavity_conditions, plot_data
 
-def find_optimal_fit(dataframe: pd.DataFrame, r_squared: float, animate: bool = False, verbose: bool = False, filename: str = "Untitled") -> tuple:
+def find_optimal_fit(dataframe: pd.DataFrame, animate: bool = False, verbose: bool = False, filename: str = "Untitled", length_constraints = [5, 15, 5]) -> tuple:
     '''
     Takes a set of pd and voltage arrays to find the most optimal fit for the data. Returning the 
     coefficients of the fit, the r_squared value, and node points of the fit.\n
     Parameters:
         dataframe (pd.DataFrame): The dataframe containing the experimental data.
-        r_squared (float): The minimum r_squared value to accept a fit.
         animate (bool): Whether to animate the fitting process.
     Returns:
         coeffs (list): The coefficients of the optimal fit.
@@ -23,21 +22,26 @@ def find_optimal_fit(dataframe: pd.DataFrame, r_squared: float, animate: bool = 
             print(msg)
 
     print_log("Finding optimal fit...")
-    fig, ax = plt.subplots()
-    ax.set(xlabel='pd (Torr*cm)', ylabel='Voltage (V)', title='Optimal Fit Finding Process')
+    if animate:
+        fig, ax = plt.subplots()
+        ax.set(xlabel='pd (Torr*cm)', ylabel='Voltage (V)', title='Optimal Fit Finding Process')
     
 
     artistList = []
-    scatterArtist, v, pd = plot_data(ax, dataframe, return_artist=True)
-    ax.set(xlim=[pd.min()-.50, pd.max()+0.5], ylim=[v.min()-50, v.max()+50])
+    
+    if animate:
+        scatterArtist, v, pd = plot_data(dataframe, ax,return_artist=True)
+        ax.set(xlim=[pd.min()-.50, pd.max()+0.5], ylim=[v.min()-50, v.max()+50])
+    else:
+        v, pd = plot_data(dataframe, return_artist=False)
     # Calculate total sum of squares for R-squared calculation
     v_bar = np.mean(v)
     ss_tot = np.sum((v - v_bar)**2)
     
     # start with an assumption of 5 points per linear segment on the left and right:
-    leftLength = 5
-    rightLength = 5
-    middleLength = 15 # setting minimum middle length, for a cubic polynomial at least 4 points are needed but we need two more for 
+    leftLength = length_constraints[0]
+    rightLength = length_constraints[2]
+    middleLength = length_constraints[1]# setting minimum middle length, for a cubic polynomial at least 4 points are needed but we need two more for 
     # the extra boundary conditions
 
     Coefficients = [[], 0, []] # [coefficients, r-squared, nodes]
@@ -81,24 +85,28 @@ def find_optimal_fit(dataframe: pd.DataFrame, r_squared: float, animate: bool = 
                 xFit = np.linspace(pd.min(), pd.max(), 500)
                 if rSquared != Coefficients[1]:
                     yFit = find_peicewise(xFit, fittedCoeffs, pd[leftNode-1], pd[rightNode])
-                    fitArtist = ax.plot(xFit, yFit, color=color)[0]
-                    annotateArtist = ax.text(pd.max()-1.5, v.min()-25, f"$R^2$: {rSquared}", color = color)
-                    localArtistList = [annotateArtist, fitArtist, scatterArtist[0]]
-                    localArtistList.extend(scatterArtist[1])
-                    localArtistList.extend(scatterArtist[2])
+                    if animate:
+                        fitArtist = ax.plot(xFit, yFit, color=color)[0]
+                        annotateArtist = ax.text(pd.max()-1.5, v.min()-25, f"$R^2$: {rSquared}", color = color)
+                        localArtistList = [annotateArtist, fitArtist, scatterArtist[0]]
+                        localArtistList.extend(scatterArtist[1])
+                        localArtistList.extend(scatterArtist[2])
                     if Coefficients[1] != 0:
                         xFit = np.linspace(pd.min(), pd.max(), 500)
                         goodCoeffs = Coefficients[0]
                         goodLeftNode = Coefficients[2][0]
                         goodRightNode = Coefficients[2][1]
                         goodRSquared = Coefficients[1]
-                        yFitGood = find_peicewise(xFit, goodCoeffs,pd[goodLeftNode-1],pd[goodRightNode])
-                        goodFitArtist = ax.plot(xFit, yFitGood, color = 'xkcd:green')[0]
-                        goodAnnotateArtist = ax.text(pd.max()-1.5, v.min()-10, f"$R^2$: {goodRSquared}", color = 'xkcd:green')
-                        localArtistList.append(goodFitArtist)
-                        localArtistList.append(goodAnnotateArtist)
-                    artistList.append(localArtistList)
-            append_artist()
+                        if animate:
+                            yFitGood = find_peicewise(xFit, goodCoeffs,pd[goodLeftNode-1],pd[goodRightNode])
+                            goodFitArtist = ax.plot(xFit, yFitGood, color = 'xkcd:green')[0]
+                            goodAnnotateArtist = ax.text(pd.max()-1.5, v.min()-10, f"$R^2$: {goodRSquared}", color = 'xkcd:green')
+                            localArtistList.append(goodFitArtist)
+                            localArtistList.append(goodAnnotateArtist)
+                    if animate:
+                        artistList.append(localArtistList)
+            if animate:
+                append_artist()
     
             
             #print_log("Optimizing fit...")
@@ -141,33 +149,34 @@ def find_optimal_fit(dataframe: pd.DataFrame, r_squared: float, animate: bool = 
                 append_artist(color='xkcd:green')
 
     xFit = np.linspace(pd.min(), pd.max(), 500)
-    localArtistList = [scatterArtist[0]]
-    localArtistList.extend(scatterArtist[1])
-    localArtistList.extend(scatterArtist[2])
+    if animate:
+        localArtistList = [scatterArtist[0]]
+        localArtistList.extend(scatterArtist[1])
+        localArtistList.extend(scatterArtist[2])
     goodCoeffs = Coefficients[0]
     goodLeftNode = Coefficients[2][0]
     goodRightNode = Coefficients[2][1]
     goodRSquared = Coefficients[1]
-    yFitGood = find_peicewise(xFit, goodCoeffs,pd[goodLeftNode-1],pd[goodRightNode])
-    goodFitArtist = ax.plot(xFit, yFitGood, color = 'xkcd:green')[0]
-    goodAnnotateArtist = ax.text(pd.max()-1.25, v.min()-10, f"$R^2$: {goodRSquared}", color = 'xkcd:green')
-    goodNodesArtist = ax.vlines([pd[goodLeftNode], pd[goodRightNode]],v.min()-50, v.max()+50,color = 'xkcd:gray', linestyles='dashed')
-    localArtistList.append(goodFitArtist)
-    localArtistList.append(goodAnnotateArtist)
-    localArtistList.append(goodNodesArtist)
-    artistList.append(localArtistList)
+    if animate:
+        yFitGood = find_peicewise(xFit, goodCoeffs,pd[goodLeftNode-1],pd[goodRightNode])
+        goodFitArtist = ax.plot(xFit, yFitGood, color = 'xkcd:green')[0]
+        goodAnnotateArtist = ax.text(pd.max()-1.25, v.min()-10, f"$R^2$: {goodRSquared}", color = 'xkcd:green')
+        goodNodesArtist = ax.vlines([pd[goodLeftNode], pd[goodRightNode]],v.min()-50, v.max()+50,color = 'xkcd:gray', linestyles='dashed')
+        localArtistList.append(goodFitArtist)
+        localArtistList.append(goodAnnotateArtist)
+        localArtistList.append(goodNodesArtist)
+        artistList.append(localArtistList)
 
     if animate:
         ani = animation.ArtistAnimation(fig, artistList, interval=75, repeat = False)
         plt.show()
         ani.save(filename=f'./BeAMED/Test Scripts/Beamed_data_11102025/{filename}Animation.gif')
-
-    #ax.clear()
-    for artist in artistList[-1]:
-        print(artist)
-        ax.add_artist(artist)
-        plt.show()
-    fig.savefig(fname = f'./BeAMED/Test Scripts/Beamed_data_11102025/{filename}OptimizedPlot.png')
+        #ax.clear()
+        for artist in artistList[-1]:
+            print(artist)
+            ax.add_artist(artist)
+            plt.show()
+        fig.savefig(fname = f'./BeAMED/Test Scripts/Beamed_data_11102025/{filename}OptimizedPlot.png')
 
     return Coefficients
 

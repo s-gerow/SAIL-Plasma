@@ -81,7 +81,7 @@ def concavity_conditions(coeffs, left_knot, right_knot):
     return [c_up_left, c_up_right]
 
 
-def plot_data(ax, dataframe: pd.DataFrame, label = "Experimental Data", color = None, mask_value = 0, return_artist: bool = False):
+def plot_data(dataframe: pd.DataFrame, ax = None, label = "Experimental Data", color = None, mask_value = 0, return_artist: bool = False):
     #Isolation of data
     p = dataframe.iloc[:,5].values
     d = dataframe.iloc[:,8].values
@@ -105,7 +105,6 @@ def plot_data(ax, dataframe: pd.DataFrame, label = "Experimental Data", color = 
     if return_artist:
         artist = ax.errorbar(p_d, v, yerr=v_err, xerr=pd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = label, color = color)
         return artist, v, p_d
-    ax.errorbar(p_d, v, yerr=v_err, xerr=pd_err, fmt='.', capsize=4, markerfacecolor = 'none', label = label, color = color)
     return v, p_d
 
 def plot_fit(ax, x, y, left_knot_range = 0.25, right_knot_range = 0.25, label = "", show_knots = True, show_stoletow = True, label_regions = True, color = None, return_r_squared = False):
