@@ -821,6 +821,8 @@ class Experiment():
             if(self.StopALL.is_set()):
                 self.log_message("OSC", "WARN", "Stop All Detected. Quitting...")
                 return
+        if not self.isDischargeSaved():
+            self.osc_plot()
         self.Osc.close_device()
         time.sleep(5)
 
@@ -890,7 +892,7 @@ class Experiment():
                             #open pump valve to reduce pressure
                         with self.tk_lock:
                             true_pressure = float(self.rough_pressure_var.get())
-                        if true_pressure < .2 and diffusionPumpOn == False:
+                        if true_pressure < .3 and diffusionPumpOn == False:
                             proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 200mTorr, please plug in the diffusion pump to reach lower pressure")
                             if proceed == False:
                                 print("stopping, refusal to turn on diffusion pump, cannot continue")
@@ -903,7 +905,7 @@ class Experiment():
                         daq_DO.task.write([False, False], auto_start=True, timeout=3)
                     proceed = False
                     while proceed == False:
-                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 40mTorr, please unplug the diffusion pump to continue")
+                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 40mTorr, please unplug the diffusion pump to continue, also open mfc input line")
                     if proceed == True:
                         diffusionPumpOn = False
                     while true_pressure < target_pressure:
@@ -927,7 +929,7 @@ class Experiment():
                             #open pump valve to reduce pressure
                         with self.tk_lock:
                             true_pressure = float(self.rough_pressure_var.get())
-                        if true_pressure < .2 and diffusionPumpOn == False:
+                        if true_pressure < .3 and diffusionPumpOn == False:
                             proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 200mTorr, please plug in the diffusion pump to reach lower pressure")
                             if proceed == False:
                                 print("stopping, refusal to turn on diffusion pump, cannot continue")
@@ -1035,29 +1037,40 @@ class Experiment():
         self.Pwr.resource.write("OUTP:STAT:IMM ON")
         voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
+        volt = 0
+        curr = 0
         while self.isDischargeTriggered.is_set() == False:
             with self.tk_lock:
                 v0 = self.voltage_out_var.get()
             self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
             self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             if(self.isDischargeTriggered.is_set()):
-                self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
-                self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
+                volt = self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")
+                curr = self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")
+                with self.tk_lock:
+                    self.PS_voltage_var.set(volt)
+                    self.PS_current_var.set(curr)
                 self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
                 self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:VOLT:DC?')} V")
             if(self.StopALL.is_set()):
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
                 return
             init_v += voltage_step
+            # curr = float(self.Pwr.resource.query('MEAS:SCAL:CURR:DC?'))
+            # if curr > 0:
+            #     self.isDischargeTriggered.set()
             time.sleep(3)
             # with self.tk_lock:
             #     v1 = self.voltage_out_var.get()
             #     self.deltaV.set(v0-v1)
             # time.sleep(2)
-        self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
-        self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
-        self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
-        self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:VOLT:DC?')} V")
+        volt = self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")
+        curr = self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")
+        with self.tk_lock:
+            self.PS_voltage_var.set(volt)
+            self.PS_current_var.set(curr)
+        self.log_message(thread, level, f"Discharge Triggered at {curr} A")
+        self.log_message(thread, level, f"Discharge Triggered at {volt} V")
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write("OUTP:STAT:IMM OFF")
