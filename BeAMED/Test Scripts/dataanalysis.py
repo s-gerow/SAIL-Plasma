@@ -2,9 +2,11 @@ import numpy as np
 import pandas as pd
 from tkinter import filedialog as fd
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize, brentq
+from scipy.optimize import minimize, brentq, root
+from scipy.special import erf
 import matplotlib.animation as animation
 import time
+from typing import Literal
 
 plt.rcParams['text.usetex'] = False
 
@@ -333,6 +335,29 @@ def EngleSteinbeckEquation(pd, A, B, gg, reject_asymptote = False):
     for i,pdx in enumerate(pd):
         v[i] = VES(pdx)
     return pd, v
+
+def RioussetEquation(p: np.array, d: float, a: float, A: float, B: float, gg: float, geometry: Literal['sph', 'cyl']):
+    b = a + d
+    Ecr = np.zeros_like(p)
+    Vcr = np.zeros_like(p)
+    for i, px in enumerate(p):
+        match geometry:
+            case 'cyl':
+                func = lambda E: (A*E*a*(np.exp(-B*px/E)-np.exp(-B*b*px/(E*a))))/B - np.log(1/gg +1)
+            case 'sph':
+                func = lambda E: (A*a*np.sqrt(px*np.pi)*erf(np.sqrt(B*px/E)*b/a))/(2*np.sqrt(B/E)) - (A*a*np.sqrt(px*np.pi)*erf(np.sqrt(B*px/E)))/(2*np.sqrt(B/E)) - np.log(1/gg + 1)
+        rootOut = root(func, 10)
+        if rootOut.success:
+            E = rootOut.x
+        else:
+            print('root failed')
+        Ecr[i] = E
+        match geometry:
+            case 'cyl':
+                Vcr[i] = E*a*np.log(b/a)
+            case 'sph':
+                Vcr[i] = E*(a-((b*a**2)/(b**2)))/(2-1)
+    return Ecr, Vcr
 
 def main():
     filepath = './BeAMED/Test Scripts/Beamed_data_11102025/202565_N2_5mm.csv'
