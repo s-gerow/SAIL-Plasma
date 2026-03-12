@@ -159,9 +159,57 @@ def move(dir_state, steps, delay=0.000005):
             do_task.write([False, dir_state])  # falling edge
             time.sleep(delay)
 
-# Move down
-move(True, 400)
-time.sleep(0.5)
 
-# Move up
-move(False, 400)      
+
+rm = pyvisa.ResourceManager()
+Dmm = rm.open_resource('USB0::0x05E6::0x6500::04386498::0::INSTR')
+
+Dmm.write(':SENS:FUNC "CONT"')
+ohm = float(Dmm.query(":READ?"))
+
+do_task = nidaqmx.Task()
+do_task.do_channels.add_do_chan("NI_DAQ/port1/line2")  # PUL
+do_task.do_channels.add_do_chan("NI_DAQ/port1/line1")  # DIR
+
+target = 800#1684#0.5*3200 # distance in mm, we say there are 3200 steps in 1 mm
+for i in range(1):
+    print(f'starting {i}')
+    # Change direction here: True (down) or False (up)
+    dir_state = True  # Toggle this to reverse motor direction
+    delay = 0.000005
+    # Set direction (second bit)
+    do_task.write([False, dir_state],auto_start=True)
+    time.sleep(0.00005)  # allow DIR to settle before stepping
+    j = 0
+    while ohm > 500:
+        # Pulse step pin (first bit)
+        do_task.write([True, dir_state])   # rising edge on STEP
+        time.sleep(delay)
+        do_task.write([False, dir_state])  # falling edge
+        time.sleep(delay)
+        #print("Direction Down")
+        ohm = float(Dmm.query(":READ?"))
+        j+=1
+    #switch direction
+    print(f'contact: {j}steps taken. moving {target}cm')
+    dir_state = False  # Toggle this to reverse motor direction
+    do_task.write([False, dir_state],auto_start=True)
+    time.sleep(0.00005)  # allow DIR to settle before stepping
+    for _ in np.arange(0,target,1):
+        # Pulse step pin (first bit)
+        do_task.write([True, dir_state])   # rising edge on STEP
+        time.sleep(delay)
+        do_task.write([False, dir_state])  # falling edge
+        time.sleep(delay)
+        #print("Direction Up")
+        ohm = float(Dmm.query(":READ?"))
+    print("done")
+do_task.close()
+Dmm.close()
+# # Move down
+# move(True, 40)
+# time.sleep(0.5)
+
+# # Move up
+# move(False, 40)      
+

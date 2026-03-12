@@ -65,7 +65,7 @@ class animator():
     
     def generate_animation(self):
         ani = animation.ArtistAnimation(self.fig, self.artistlist, interval=50, repeat = False)
-        ani.save(filename=f'./BeAMED/Test Scripts/Beamed_data_11102025/{self.filename}Animation.gif')
+        ani.save(filename=f'{self.filename}Animation.gif')
         plt.show()
         return ani
 
@@ -360,7 +360,7 @@ def RioussetEquation(p: np.array, d: float, a: float, A: float, B: float, gg: fl
     return Ecr, Vcr
 
 def main():
-    filepath = './BeAMED/Test Scripts/Beamed_data_11102025/202565_N2_5mm.csv'
+    filepath = r'C:\Users\gerows\Python\SAIL-Plasma\202565_N2_5mm.csv'
     p_d, v, pd_err, v_err = open_data(filepath=filepath)
     fig, ax = plt.subplots()
     ax.set(xlim=[p_d.min()-.50, p_d.max()+0.5], ylim=[v.min()-50, v.max()+50])
@@ -370,7 +370,7 @@ def main():
     artistList.extend(errorbarActor[1])
     artistList.extend(errorbarActor[2])
 
-    ani_object = animator(fig, ax, filename="testing")
+    ani_object = animator(fig, ax, filename="N2_ani")
     ani_object.set_persistent(artistList, keep = True)
 
     coeffs_list = optimize_fit(p_d, v, 5, 6, 5, animator=ani_object, animate=True)
@@ -382,7 +382,7 @@ def main():
     for artist in ani_object.get_frame(-1):
         ax.add_artist(artist)
         plt.show()
-        #ani_object.fig.savefig(fname = f'./BeAMED/Test Scripts/Beamed_data_11102025/{ani_object.filename}OptimizedPlot.png')
+        #ani_object.fig.savefig(fname = f'{ani_object.filename}OptimizedPlot.png')
 
 
 if __name__ == "__main__":
