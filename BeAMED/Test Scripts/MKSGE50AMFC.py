@@ -179,12 +179,12 @@ class MFCWindow(tk.Tk):
             self.setPointVoltage.append(setpoint)
             self.flowSignalVoltage.append(flowSignal_unfiltered_avg)
 
-            # if len(self.time) > 600:
-            #     self.KJLvoltage.pop(0)
-            #     self.MKSvoltage.pop(0)
-            #     self.time.pop(0)
-            #     self.setPointVoltage.pop(0)
-            #     self.flowSignalVoltage.pop(0)
+            if len(self.time) > 600:
+                self.KJLvoltage.pop(0)
+                self.MKSvoltage.pop(0)
+                self.time.pop(0)
+                self.setPointVoltage.pop(0)
+                self.flowSignalVoltage.pop(0)
             self.update_plot(self.time[0])
             if self.stop.is_set():
                 self.measure.clear()
