@@ -41,4 +41,4 @@ Figures/
 *.gif
 
 #include tutorial images
-!PyTHAGORA/Images/
+!PyTHAGORA/Images/*.png
