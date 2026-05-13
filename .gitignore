@@ -39,3 +39,6 @@ Figures/
 *.zip
 
 *.gif
+
+#include tutorial images
+!PyTHAGORA/Images/
