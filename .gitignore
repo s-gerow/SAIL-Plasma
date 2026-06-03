@@ -17,6 +17,7 @@ __pycache__/
 *.txt
 *.xlsx
 *csv
+*.gif
 
 #MACOS
 *.DS_Store

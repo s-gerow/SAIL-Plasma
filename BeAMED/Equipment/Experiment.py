@@ -1,7 +1,5 @@
 from Devices import *
 
-
-
 class experimentWindow(tk.Tk):
     '''
     Creates a top-level widget to contain one or more device interaction spaces. Allows for the importing of devices which contain logic, storage, and tkinter widgets for the 
@@ -14,13 +12,25 @@ class experimentWindow(tk.Tk):
         if fullscreen:
             self.geometry("%dx%d" % (self.winfo_screenwidth(),self.winfo_screenheight()))
         self.rm = pyvisa.ResourceManager()
+        self.close_tasks()
         self.menuBar = tk.Menu(self)
         self.fileMenu = tk.Menu(self, tearoff=0)
         self.equipmentlist = tk.Menu(self.fileMenu, tearoff=0)
         self.fileMenu.add_cascade(label="Add Equipment", menu=self.equipmentlist)
         self.menuBar.add_cascade(label="File", menu=self.fileMenu)
         self.config(menu=self.menuBar)
-        
+    
+    def open_tasks(self):
+        self.ao_task = nidaqmx.Task()
+        self.ai_task = nidaqmx.Task()
+        self.do_task = nidaqmx.Task()
+
+        self.ai_task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=nidaqmx.constants.AquisitionType.FINITE, samps_per_chan=100)
+
+    def close_tasks(self):
+        if hasattr(self, 'ao_task'):
+            print('has the attr')
+    
     def get_resources(self):
         '''
         Returns a tuple containing resources available to the resource manager.

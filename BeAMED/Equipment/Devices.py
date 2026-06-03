@@ -16,7 +16,6 @@ import csv
 import importlib.util
 from typing import Literal
 
-
 # Define additional required packages
 required = {'pyvisa', 'matplotlib', 'numpy', 'nidaqmx', 'pandas', 'openpyxl'}
 # Get installed packages
@@ -28,7 +27,6 @@ if missing:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip'])
     # Install missing packages
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])
-
 
 #Interface for Plasma Chamber
 import pyvisa
@@ -88,7 +86,7 @@ class DAQDevice():
     Class to aid in the programming of devices which communicate using a national instruments digital aquisition device.
     This class is keyed specifically to the NI USB-6002
     '''
-    def __init__(self, parent: tk.Tk, DAQ = 'NI_DAQ', title = "untitled DAQ device"):
+    def __init__(self, parent: tk.Tk, daqLock: Lock, DAQ = 'NI_DAQ', title = "untitled DAQ device"):
         '''
         :param parent: Parent tkinter object the window will reside in
         :type parent: tk.Tk
@@ -98,6 +96,7 @@ class DAQDevice():
         self.parentWindow = parent
         self.daq = DAQ
         self.name = title
+        self.lock = daqLock
         self.Frame = tk.LabelFrame(self.parentWindow, text=title)
         self.Frame.pack()
         tk.Label(self.Frame, text = "daqdevice").pack()
@@ -167,7 +166,7 @@ class DAQDevice():
         ai_task.ai_channels.add_ai_voltage_chan(line, name_to_assign_to_channel=name, min_val=v_min, max_val=v_max, terminal_config=term_cfg)
         self.dataframe[name] = pd.Series()
 
-    def add_analog_output(self, pin: Literal['ai1', 'ai2'], name: str, values: tuple = (0,5)):
+    def add_analog_output(self, pin: Literal['ao1', 'ao2'], name: str, values: tuple = (0,5)):
         '''
         Add an analog voltage output channel on a given line.
         Parameters:
@@ -256,7 +255,8 @@ class DAQDevice():
         Both of these will create a channel for continually generating a waveform on the selected physical channel. See the nidaqmx-python readthedocs for specific functions.
         '''
         return function(self.tasks[task], *args, **kwargs)
-        
+
+
 class VisaDevice(Device):
     '''
     Base class for VISA devices
@@ -349,7 +349,6 @@ class VisaDeviceFrame(ttk.LabelFrame):
         self.instrumentFrame = tk.Frame(self)
         self.create_widgets()
 
-
     def create_widgets(self):
         ''''''
         instrumentInitFrame = tk.Frame(self)
@@ -366,7 +365,19 @@ class DAQDeviceFrame(ttk.Frame):
     '''
     Frame for displaying DAQ Device information
     '''
-    pass
+    def __init__(self, parent: tk.Tk, device: DAQDevice, tkLock: Lock, text = None):
+        self.device = device
+        super().__init__(parent, text = self.device.getName())
+        self.instrumentFrame = tk.Frame(self)
+        self.create_widgets()
+    
+    def create_widgets(self):
+        ''''''
+        instrumentInitFrame = tk.Frame(self)
+        instrumentInitFrame.pack(side='top', filll = 'x')
+        self.instrumentFrame.pack(side='top', fill = 'both')
+            
+
 
 class keithleyDMM6500(VisaDevice):
     '''
@@ -453,6 +464,7 @@ class siglentSDS1204X_E(VisaDevice):
         self.axes.set_xlabel('Time (s)')
 
         self.figure_canvas.draw()
+        print("Done")
 
     def monitorTrigger(self):
         self.resource.open()
