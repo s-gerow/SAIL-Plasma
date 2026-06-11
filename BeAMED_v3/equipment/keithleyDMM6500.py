@@ -1,5 +1,5 @@
-import BeAMED.Equipment.Experiment as Experiment
-from BeAMED.Equipment.Experiment import *
+import BeAMED.EquipmentFiles.Experiment as Experiment
+from BeAMED.EquipmentFiles.Experiment import *
 
 if __name__ == "__main__":
     #Automatically creates chamebr app and imports experiment

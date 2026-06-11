@@ -1,4 +1,4 @@
-from Devices import *
+from BeAMED.EquipmentFiles.Devices import *
 
 class experimentWindow(tk.Tk):
     '''
