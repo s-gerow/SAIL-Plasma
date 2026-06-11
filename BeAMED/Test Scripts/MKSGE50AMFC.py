@@ -43,7 +43,7 @@ class MFCWindow(tk.Tk):
         self.ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai3", name_to_assign_to_channel="FlowSignalInput", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
         self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="ValveOpen")
         self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="ValveClose")
-
+        self.do_task.do_channels.add_do_chan("NI_DAQ/port0/line2", name_to_assign_to_lines="ValvePump")
 
         #set input settings
         self.ai_task.timing.cfg_samp_clk_timing(rate=1000, sample_mode=nidaqmx.constants.AcquisitionType.FINITE, samps_per_chan=100)
@@ -53,17 +53,17 @@ class MFCWindow(tk.Tk):
         self.plotFrame.grid(row=0, column=0)
 
         #make plot to display data
-        figure = Figure(dpi=75)
-        self.figure_canvas = FigureCanvasTkAgg(figure, self.plotFrame)
+        self.figure = Figure(dpi=75)
+        self.figure_canvas = FigureCanvasTkAgg(self.figure, self.plotFrame)
         NavigationToolbar2Tk(self.figure_canvas,self.plotFrame).pack(side='top')
-        self.axes = figure.add_subplot()
+        self.axes = self.figure.add_subplot()
         #self.axes.set_title('MFC I/O Plot')
         self.axes.set_ylabel('Pressure (Torr)')
         self.axes.set_xlabel('Time (s)')
 
         self.axes2 = self.axes.twinx()
         self.axes2.set_ylabel('Voltage (V)')
-        figure.tight_layout()
+        self.figure.tight_layout()
         self.figure_canvas.get_tk_widget().pack(side='top')
 
         self.variableFrame = tk.LabelFrame(self, text="GE50A Control")
@@ -110,7 +110,8 @@ class MFCWindow(tk.Tk):
         tk.Button(self.variableFrame, text='Stop Monitoring', command=lambda: self.stop_measure()).grid(row=11,column=0)
         tk.Button(self.variableFrame, text='Vent Chamber',command=lambda: self.control_valve('vent')).grid(row=12,column=0)
         tk.Button(self.variableFrame, text='Pump Chamber',command=lambda: self.control_valve('pump')).grid(row=13,column=0)
-        tk.Button(self.variableFrame, text='Close Valves',command=lambda: self.control_valve('stop')).grid(row=14,column=0)
+        tk.Button(self.variableFrame, text='Open Small Vent',command=lambda: self.control_valve('small')).grid(row=14,column=0)
+        tk.Button(self.variableFrame, text='Close Valves',command=lambda: self.control_valve('stop')).grid(row=15,column=0)
 
         self.tkpressureSetPoint = tk.DoubleVar(value=1)
         tk.Label(self.variableFrame, text = "Pressure Set Point (Torr)").grid(row=0, column=1)
@@ -119,9 +120,9 @@ class MFCWindow(tk.Tk):
                    to=10,
                    textvariable=self.tkpressureSetPoint).grid(row=1,column=1)
         
-        self.tkKp = tk.DoubleVar(value=0.115*0.6)
-        self.tkKi = tk.DoubleVar(value=0.5*0.4)
-        self.tkKd = tk.DoubleVar(value=0.4/8)
+        self.tkKp = tk.DoubleVar(value=0.1)
+        self.tkKi = tk.DoubleVar(value=0.005)
+        self.tkKd = tk.DoubleVar(value=0)
         tk.Label(self.variableFrame, text="K_p").grid(row=2,column=1)
         tk.Spinbox(self.variableFrame,
                    textvariable=self.tkKp).grid(row=3,column=1)
@@ -280,19 +281,24 @@ class MFCWindow(tk.Tk):
         self.axes.legend(loc='upper center', bbox_to_anchor=(0.5,0.98), ncol=2, fancybox=True, shadow=True)
         self.axes.spines['top'].set_visible(False)
         self.axes2.spines['top'].set_visible(False)
+        self.figure.tight_layout()
         self.figure_canvas.draw()
     
     def control_valve(self, arg:str):
+        print('valve' + arg)
         with self.daqLock:
             match arg:
                 case 'vent':
-                    self.do_task.write([False,True],auto_start=True,timeout=3)
+                    self.do_task.write([False,True,False],auto_start=True,timeout=3)
                     return
                 case 'pump':
-                    self.do_task.write([True,False],auto_start=True,timeout=3)
+                    self.do_task.write([True,False, False],auto_start=True,timeout=3)
+                    return
+                case 'small':
+                    self.do_task.write([False,False,True], auto_start=True, timeout=3)
                     return
                 case 'stop':
-                    self.do_task.write([False,False],auto_start=True,timeout=3)
+                    self.do_task.write([False,False,False],auto_start=True,timeout=3)
                     return
                 case _:
                     return
