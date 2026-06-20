@@ -2,12 +2,28 @@ from abc import ABC, abstractmethod
 import logging
 
 class Equipment(ABC):
-    '''
-    Abstract class designed to be developed into different ways to access a device. Includes key attributes and methods that all devices should have such as an identifier,
-    query, write, open, and close functions.
-    can be used by a controller or standalone in a GUI or from the terminal
-    '''
+    """
+    Abstract object with basic methods and attributes to be inherited by specialized children.
+
+    Returns
+    -------
+    __Equipment__
+        Abstract object with basic methods and attributes to be inherited by specialized children.
+
+    Raises
+    ------
+    NotImplementedError
+        Methods not implemented in this class raise a NotImplementedError if called via Equipment.method()
+    """
     def __init__(self, name: str):
+        """
+        Initialize and return equipment object
+
+        Parameters
+        ----------
+        name : str
+            String representing the name of the instrument as it will be referenced in dictionaries, logs, and controller calls
+        """
         self.name = name
         self.standalone = False
         self.logger = logging.getLogger(f"BeAMED.{name.lower().replace(' ','_')}")
@@ -23,13 +39,34 @@ class Equipment(ABC):
     def getStatus(self) -> dict: ...
 
     def reset(self):
-        '''
-        Override if device supports *RST or equivalent
-        '''
+        """
+        If available, implement a reset function such as *RST which clears the communication line and resets the instrument to default settings.
+
+        Raises
+        ------
+        NotImplementedError
+            Equipment.reset() is not implemented at this level.
+        """
         raise NotImplementedError(f"{type(self).__name__} does not implement reset()")
         
-    def getName(self):
+    def getName(self) -> str:
+        """
+        Return the name of the instrument.
+
+        Returns
+        -------
+        str
+            Name of the instrument as used in dictionaries, logs, and method calls.
+        """
         return self.name
     
     def setName(self, name: str):
+        """
+        Set the name of the instrument.
+
+        Parameters
+        ----------
+        name : str
+            Name of the instrument as used in dictionaries, logs, and method calls.
+        """
         self.name = name
