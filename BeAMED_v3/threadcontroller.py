@@ -94,6 +94,7 @@ class Controller:
         Calls equipment action on a thread
         '''
         threading.Thread(target = self._run,
+                         name=action,
                          args=(action, target, method),
                          kwargs=kwargs,
                          daemon=True).start()
@@ -102,7 +103,7 @@ class Controller:
         try:
             equipment = self.get(target)
             result = getattr(equipment, method)(**kwargs)
-            self.result_queue.put(ActionResult(
+            self.queue.put(ActionResult(
                 key = target,
                 action=action,
                 success = True,

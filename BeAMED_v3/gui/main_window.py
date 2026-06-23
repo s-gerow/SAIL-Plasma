@@ -6,7 +6,9 @@ from tkinter import ttk
 
 from gui.logger import QueueHandler
 from gui.terminal import BenchTerminal
+from gui.threadmonitor import ThreadMonitor
 from gui.frames.oscilloscopeframe import OscilloscopeFrame
+from gui.frames.nidaqframe import PressureFrame
 from threadcontroller import Controller, ConnectResult, ActionResult
 
 class MainWindow(tk.Tk):
@@ -37,18 +39,32 @@ class MainWindow(tk.Tk):
         self._build_menubar()
     
     def _build_frames(self):
+        self.rowconfigure(0, weight=8)
+        self.rowconfigure(1, weight=2)
+        self.columnconfigure(0,weight=1)
         self.main_frame = tk.Frame(self)
         self.main_frame.grid(row=0, column=0, sticky="NSEW")
-        self.main_frame.rowconfigure(0, weight=80)
         
-        self.terminal_frame = BenchTerminal(self, namespace=self._build_namespace(), log_queue=self.queue)
-        self.terminal_frame.grid(row=1, column=0, sticky="NSEW")
+        self.debug_frame = tk.Frame(self)
+        self.debug_frame.grid(row=1,column=0,sticky="nsew")
+        self.debug_frame.columnconfigure(0,weight=8)
+        self.debug_frame.columnconfigure(1,weight=2)
+        self.debug_frame.rowconfigure(0, weight=1)
 
-        # store last known heigh so toggle can restore it
+        self.terminal_frame = BenchTerminal(self.debug_frame, namespace=self._build_namespace(), log_queue=self.queue)
+        self.terminal_frame.grid(row=0, column=0, sticky="NSEW")
+        self.thread_frame = ThreadMonitor(self.debug_frame, namespace=self._build_namespace(), log_queue=self.queue)
+        self.thread_frame.grid(row=0, column=1,sticky="nsew")
+
+        self._debug_open = tk.BooleanVar(value=True)
         self._terminal_open = tk.BooleanVar(value=True)
+        self._threads_open = tk.BooleanVar(value=True)
 
         self.osc_frame = OscilloscopeFrame(self.main_frame, self.controller)
         self.osc_frame.pack(fill="both", expand=True)
+
+        self.pressure_frame = PressureFrame(self.main_frame, self.controller)
+        self.pressure_frame.pack(fill="both", expand=True, side="right")
         
     def _build_namespace(self) -> dict:
         """
@@ -61,18 +77,28 @@ class MainWindow(tk.Tk):
         }
 
     def _toggle_terminal(self):
-        # Note: Need to add some polling mechanism to change the value of _terminal_open if the user drags the terminal sash up or down
-        # possibly an on_click or _ondrag activation already exists.
-        # Note2: Need to make the toggling work but for now I am happy it is here.
         if self._terminal_open.get():
-            self.logger.debug(self._terminal_open.get())
+            self.terminal_frame.grid(row=0, column=0, sticky="NSEW")
+            self.logger.debug("Closing Terminal")
+        else:
             self.terminal_frame.grid_forget()
             self.logger.debug("Opening Terminal")
+
+    def _toggle_debug(self):
+        if self._debug_open.get():
+            self.debug_frame.grid(row=1, column=0, sticky="NSEW")
+            self.logger.debug("Closing Debug")
         else:
-            self.logger.debug(self._terminal_open.get())
-            self.terminal_frame.grid(row=1, column=0, sticky="NSEW")
-            self.terminal_frame.grid_rowconfigure(1, weight=20)
-            self.logger.debug("Closing Terminal")
+            self.debug_frame.grid_forget()
+            self.logger.debug("Opening Debug")
+
+    def _toggle_threads(self):
+        if self._threads_open.get():
+            self.thread_frame.grid(row=0, column=1, sticky="NSEW")
+            self.logger.debug("Closing Thread Monitor")
+        else:
+            self.thread_frame.grid_forget()
+            self.logger.debug("Opening Thread Monitor")
 
     def _build_menubar(self):
         menubar = tk.Menu(self)
@@ -94,7 +120,9 @@ class MainWindow(tk.Tk):
         # fullscreen button. maybe an option to turn off different equipment views? I am not sure. This may not have a lof of things
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
+        view_menu.add_checkbutton(label="Toggle Debug", command=self._toggle_debug, variable=self._debug_open, )
         view_menu.add_checkbutton(label="Toggle Terminal", command=self._toggle_terminal, variable=self._terminal_open, )
+        view_menu.add_checkbutton(label="Toggle Thread Monitor", command=self._toggle_threads, variable=self._threads_open, )
         # Equipment Menu
         # First custom menu, this will have the options for equipment. Connect all, disconnect all. Connect individual, disconnect individual,
         # open debug console for a specific equipment. etc.
@@ -114,6 +142,7 @@ class MainWindow(tk.Tk):
 
 
     def _poll(self):
+        #self.logger.debug("Polling queue...")
         try:
             while True:
                 result = self.controller.queue.get_nowait()
@@ -123,7 +152,18 @@ class MainWindow(tk.Tk):
         self.after(self.POLL_INTERVAL_MS, self._poll)
 
     def _route_result(self, result):
-        pass
+        if isinstance(result, ConnectResult):
+            if result.success:
+                self.logger.info(f"Connected: {result.key}")
+            else:
+                self.logger.error(f"Failed to connect {result.key}: {result.error}")
+        elif isinstance(result, ActionResult):
+            if result.action.startswith("osc_"):
+                self.osc_frame.handle_result(result)
+            else:
+                self.logger.warning(f"Unhandled action result: {result.action}")
+        else:
+            self.logger.warning(f"Unkown result type on queue: {type(result)}")
 
     def _on_close(self):
         self.controller.shutdown()

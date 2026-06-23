@@ -1,5 +1,7 @@
 import pyvisa
+
 from equipment.baseequipment import Equipment
+
 
 class VisaEquipment(Equipment):
     '''
@@ -27,7 +29,7 @@ class VisaEquipment(Equipment):
         else:
             self.logger.debug(f"Opening resource {self.resourceID}")
             self.resource = self.resourceManager.open_resource(self.resourceID)
-            self.connected = True
+            self._connected = True
             self.logger.info(f"{self.resourceID} successfully connected with name {self.name}")
     
     def disconnect(self):

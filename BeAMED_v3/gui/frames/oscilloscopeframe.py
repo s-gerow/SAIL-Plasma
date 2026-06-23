@@ -5,6 +5,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 import logging
 
 from threadcontroller import Controller, ActionResult
+from equipment.oscilloscope import Waveform
 
 class OscilloscopeFrame(tk.LabelFrame):
 
@@ -23,6 +24,8 @@ class OscilloscopeFrame(tk.LabelFrame):
         btn_row.pack(fill="x")
 
         for text, action, method in [
+            #("Connect", "osc_connect", "connect"),
+            #("Disconnect", "osc_disconnect", "disconnect"),
             ("Capture", "osc_capture", "capture")
         ]:
             tk.Button(btn_row, text = text, command = lambda a=action, m=method: self._run(a, m)).pack(side="left")
@@ -40,7 +43,26 @@ class OscilloscopeFrame(tk.LabelFrame):
         self.logger.warning(f"{type(self).__name__} does not implement _style_axes() yet")
     
     def _run(self, action: str, method: str, **kwargs):
-        self.controller.run(action, "oscilloscope", method, **kwargs)
+        self.controller.run(action, "Oscilloscope", method, **kwargs)
+
+    def _capture(self):
+        self.logger.info("Capturing Oscilloscope View")
+        self.controller.run("osc_capture", "Oscilloscope", "capture")
 
     def handle_result(self, result: ActionResult):
-        self.logger.warning(f"{type(self).__name__} does not implement handle_result() yet")
+        if not result.success:
+            self.logger.error(f"Oscilloscope action failed: {result.error}")
+            return
+
+        if result.action == "osc_capture":
+            self._plot_waveform(result.data["result"])
+        elif result.action == "osc_write":
+            self.logger.debug("Write Acknowledged")
+        else:
+            self.logger.warning(f"Unhandled osc result: {result.action}")
+
+    def _plot_waveform(self, waveform: Waveform):
+        self.ax.clear()
+        self._style_axes()
+        self.ax.plot(waveform.time, waveform.voltage)
+        self.canvas.draw()

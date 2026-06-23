@@ -129,7 +129,7 @@ class SiglentSDS1204XE(VisaEquipment):
 
         self.write(f"{channel}:WF? DAT2")
         raw = self.read_raw()[16:-2]
-
+        self.logger.debug(f"Response: {len(raw)} bytes")
         codes = np.frombuffer(raw, dtype=np.uint8).astype(np.int16)
         voltage = np.where(codes < 127,
                            codes * (vdiv / 25) - offset,
