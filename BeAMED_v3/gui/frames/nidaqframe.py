@@ -23,6 +23,7 @@ class PressureFrame(tk.LabelFrame):
         self._kjl_pressure = deque(maxlen=self.MAX_POINTS)
         self._mks_pressure = deque(maxlen=self.MAX_POINTS)
 
+        self._pressure_monitor_params: dict[str, tk.Variable] = {}
         self._running = False
         self._build()
 
@@ -32,19 +33,80 @@ class PressureFrame(tk.LabelFrame):
         self._build_plot()
 
     def _build_controls(self):
-        column = tk.Frame(self)
-        column.pack(fill="y",side="right")
+        control_col = tk.Frame(self)
+        control_col.pack(fill="y",side="right")
 
-        tk.Button(column, text = "Start",
-                  command=self._start).pack(side="top")
-        tk.Button(column, text = "Stop",
-                  command=self._stop).pack(side="top")
-        tk.Button(column, text = "Clear",
-                  command=self._clear).pack(side="top")
+        control_col.columnconfigure(0,weight=1)
+        control_col.columnconfigure(1,weight=1)
+
+        mfc = self.controller.registry.get("nidaq").mfc
+        
+        # Pressure Monitor Set-Up
+        row_num = 0
+        tk.Label(control_col, text="Pressure Monitor").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Label(control_col, text="Poll Frequency (ms)").grid(row=row_num, column=0)
+        self._pressure_monitor_params["poll_freq"] = tk.DoubleVar(value=self.POLL_MS)
+        ttk.Spinbox(control_col, 
+                    textvariable=self._pressure_monitor_params["poll_freq"],
+                    from_=1,
+                    to=500,
+                    state="disabled",
+                    increment=0.1).grid(row=row_num,column=1)
+
+        row_num += 1
+        tk.Button(control_col, text="Start Pressure Monitor Thread", command=self._start).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Stop Pressure Monitor Thread", command=self._stop).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Clear Pressure Series", command = self._clear).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+
+        # PI Control Panel
+        tk.Label(control_col, text="PI Controller").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Label(control_col, text="K_p").grid(row=row_num, column=0)
+        self._pressure_monitor_params["pi_kp"] = tk.DoubleVar(value=0.0)
+        ttk.Spinbox(control_col, 
+                    textvariable=self._pressure_monitor_params["pi_kp"],
+                    from_=0,
+                    to=1,
+                    state="disabled",
+                    increment=0.1).grid(row=row_num,column=1)
+        row_num += 1
+        tk.Label(control_col, text="K_i").grid(row=row_num, column=0)
+        self._pressure_monitor_params["pi_ki"] = tk.DoubleVar(value=0.0)
+        ttk.Spinbox(control_col, 
+                    textvariable=self._pressure_monitor_params["pi_kp"],
+                    from_=0,
+                    to=1,
+                    state="disabled",
+                    increment=0.01).grid(row=row_num,column=1)
+        row_num += 1
+        tk.Button(control_col, text="Configure PI Controller").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Start PI Controller").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Stop PI Controller").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Clear PI Series").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+
+        # Valve Control Panel
+        tk.Label(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Vent Chamber").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Pump Chamber (main)").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Pump Chamber (secondary)").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Close Valves").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
         
     def _build_readout(self):
         row = tk.Frame(self)
-        row.pack(fill="x", side="left")
+        row.pack(fill="x", side="top")
 
         tk.Label(row, text="KJL").pack(side="left")
         self._kjl_var = tk.StringVar(value = "--- V")
@@ -66,7 +128,7 @@ class PressureFrame(tk.LabelFrame):
 
         self.canvas = FigureCanvasTkAgg(self.fig, self)
         NavigationToolbar2Tk(self.canvas, self).pack(fill="x")
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.canvas.get_tk_widget().pack(side="bottom",fill="both", expand=True)
 
     def _style_axes(self):
         self.logger.warning(f"{type(self).__name__} does not implement _style_axes() yet")

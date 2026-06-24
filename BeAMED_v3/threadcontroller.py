@@ -80,7 +80,8 @@ class Controller:
 
     def disconnect_all(self):
         for key, equipment in self.registry.items():
-            self._disconnect_instrument(key,equipment)
+            if equipment.isConnected():
+                self._disconnect_instrument(key,equipment)
 
     def _disconnect_instrument(self, key: str, equipment: Equipment):
         try:

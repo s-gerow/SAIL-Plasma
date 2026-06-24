@@ -43,7 +43,7 @@ class SiglentSDS1204XE(VisaEquipment):
     resource_id : _type_, optional
         Resource identification string used by VISA inferfaces to connect and communication with the device, unique to each individual instrument, by default "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR".
     """
-    def __init__(self,  manager: pyvisa.ResourceManager, name:str = "Oscilloscope", resource_id:str = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR"):
+    def __init__(self,  manager: pyvisa.ResourceManager, name:str = "oscilloscope", resource_id:str = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR"):
         """
         Initialize and return SiglentSDS1204XE object using default resource identification string
 

@@ -27,6 +27,7 @@ class Equipment(ABC):
         self.name = name
         self.standalone = False
         self.logger = logging.getLogger(f"BeAMED.{name.lower().replace(' ','_')}")
+        self._connected: bool
 
     
     @abstractmethod
@@ -70,3 +71,6 @@ class Equipment(ABC):
             Name of the instrument as used in dictionaries, logs, and method calls.
         """
         self.name = name
+
+    def isConnected(self):
+        return self._connected

@@ -16,7 +16,7 @@ class PowerSeries:
     t_discharge: float
 
 class Keithley2260B_800_1(VisaEquipment):
-    def __init__(self, manager: pyvisa.ResourceManager, name: str = "PowerTopR",  resource_id: str = "ASRL4::INSTR"):
+    def __init__(self, manager: pyvisa.ResourceManager, name: str = "pwr",  resource_id: str = "ASRL4::INSTR"):
         super().__init__(name, manager, resource_id)
 
     def configure(self):
@@ -31,10 +31,9 @@ class Keithley2260B_800_1(VisaEquipment):
     def enable_output(self):
         self.write(f"OUTP:STAT:IMM ON")
 
-    def
-
     def getStatus(self):
         base = super().get_status()
         if self._connected:
             base["voltage"] = self.query("MEAS:SCAL:VOLT:DC?")
             base["current"] = self.query("MEAS:SCAL:CURR:DC?")
+        return base

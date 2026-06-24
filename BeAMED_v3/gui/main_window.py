@@ -9,9 +9,12 @@ from gui.terminal import BenchTerminal
 from gui.threadmonitor import ThreadMonitor
 from gui.frames.oscilloscopeframe import OscilloscopeFrame
 from gui.frames.nidaqframe import PressureFrame
+from gui.frames.multimeterframe import MultimeterFrame
+from gui.frames.powersupplyframe import PowerFrame
+from gui.frames.experimentframe import ExperimentControlFrame
 from threadcontroller import Controller, ConnectResult, ActionResult
 
-class MainWindow(tk.Tk):
+class BeAMEDWindow(tk.Tk):
     POLL_INTERVAL_MS = 50
 
     def __init__(self, controller: Controller):
@@ -44,7 +47,16 @@ class MainWindow(tk.Tk):
         self.columnconfigure(0,weight=1)
         self.main_frame = tk.Frame(self)
         self.main_frame.grid(row=0, column=0, sticky="NSEW")
+        self.main_frame.rowconfigure(0, weight=1)
+        self.main_frame.rowconfigure(1, weight=1)
+        self.main_frame.columnconfigure(0, weight=1)
+        self.main_frame.columnconfigure(1, weight=1)
+        self.main_frame.columnconfigure(2, weight=1)
+        self.main_frame.columnconfigure(3, weight=1)
+        self.main_frame.columnconfigure(4, weight=1)
         
+        self.exp_controller = ExperimentControlFrame(self.main_frame, self.controller)
+
         self.debug_frame = tk.Frame(self)
         self.debug_frame.grid(row=1,column=0,sticky="nsew")
         self.debug_frame.columnconfigure(0,weight=8)
@@ -60,12 +72,36 @@ class MainWindow(tk.Tk):
         self._terminal_open = tk.BooleanVar(value=True)
         self._threads_open = tk.BooleanVar(value=True)
 
+        # grid layout plan I think
+        # | 01 | 02 - 03 | 04 - 05 | 
+        # | 06 | 07 | 08 | 09 - 10 |
+        # | 11 - 12 - 13 - 14 | 15 | 
+        # 01: experiment inputs
+        # 02-03: nidaq frame, pressure, mfc, and feedthrough
+        # 04-05, 09-10: oscilloscope and outputs
+        # 06: dmm
+        # 07: pwr
+        # 08: free? maybe use this for feedthough instead of mergin with 02-03
+        # 11-14: terminal
+        # 15: thread monitor
+
+        self.exp_controller.input_frame.grid(row=0, column=0, sticky="nsew")
+
+        self.dmm_frame = MultimeterFrame(self.main_frame, self.controller)
+        self.dmm_frame.grid(row=1, column=0, sticky="nsew")
+
         self.osc_frame = OscilloscopeFrame(self.main_frame, self.controller)
-        self.osc_frame.pack(fill="both", expand=True)
+        self.osc_frame.grid(row=0, column=3, columnspan=2, sticky="nsew")
 
         self.pressure_frame = PressureFrame(self.main_frame, self.controller)
-        self.pressure_frame.pack(fill="both", expand=True, side="right")
+        self.pressure_frame.grid(row=0, column=1, columnspan=2, sticky="nsew")
         
+        self.pwr_frame = PowerFrame(self.main_frame, self.controller)
+        self.pwr_frame.grid(row=1, column=1, sticky="nsew")
+
+        tk.Frame(self.main_frame, bg="#47B3FC").grid(row=1, column=2, sticky="nsew")
+        self.exp_controller.output_frame.grid(row=1, column=3, columnspan=2, sticky="nsew")
+
     def _build_namespace(self) -> dict:
         """
         This is basically the PATH variable for a regular terminal. it defines the commands the terminal bar in the gui can recognize
@@ -74,6 +110,7 @@ class MainWindow(tk.Tk):
             "controller": self.controller,
             "debug": lambda name: logging.getLogger(f"BeAMED.{name}").setLevel(logging.DEBUG),
             "quiet": lambda name: logging.getLogger(f"BeAMED.{name}").setLevel(logging.WARNING),
+            "IDN": lambda target: self.controller.run("query",target,"query",command="*IDN?")
         }
 
     def _toggle_terminal(self):
@@ -160,6 +197,11 @@ class MainWindow(tk.Tk):
         elif isinstance(result, ActionResult):
             if result.action.startswith("osc_"):
                 self.osc_frame.handle_result(result)
+            elif result.action in ("query"):
+                if result.success:
+                    self.logger.info(f"RESPONSE: {result.data['result']}")
+                else:
+                    self.logger.error(f"Query failed: {result.error}")
             else:
                 self.logger.warning(f"Unhandled action result: {result.action}")
         else:

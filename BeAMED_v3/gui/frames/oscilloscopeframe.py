@@ -12,7 +12,7 @@ class OscilloscopeFrame(tk.LabelFrame):
     def __init__(self, parent, controller: Controller):
         super().__init__(parent, text="Siglent SDS1240X-E")
         self.controller = controller
-        self.logger = logging.getLogger("BeAMED.gui.Oscilloscope")
+        self.logger = logging.getLogger("BeAMED.gui.oscilloscope")
         self._build()
 
     def _build(self):

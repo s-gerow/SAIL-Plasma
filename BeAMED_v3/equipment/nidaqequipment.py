@@ -15,6 +15,7 @@ class NIDAQEquipment(Equipment):
         self._task_lock = threading.Lock()
         self._abort_event = threading.Event()
         self.tasks: dict[str, nidaqmx.Task] = {}
+        self._connected = False
 
         # subsystems
         self.pressure = subsystemPressure(self)
@@ -68,6 +69,7 @@ class NIDAQEquipment(Equipment):
         do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line1", name_to_assign_to_lines="DIR")
         self.tasks["do_feedthrough"] = do_feedthrough
 
+        self._connected = True
         self.logger.info("NIDAQ tasks configured")
 
     def disconnect(self):
@@ -81,10 +83,12 @@ class NIDAQEquipment(Equipment):
             except Exception as e:
                 self.logger.exception(f"Error closing task {name}")
         self.tasks.clear()
+        self._connected = True
 
     def getStatus(self) -> dict:
         p1, p2 = self.pressure.latest
         return {
+            "Connected": self._connected,
             "KJL_pressure": p1,
             "MKS_pressure": p2,
             "MFC_flow": self.mfc.read_flow() if 'ai_poll' in self.tasks else None,
@@ -191,8 +195,9 @@ class subsystemMFC:
         t=time.perf_counter()
         with self._parent._task_lock:
             self._parent.tasks["ao"].write(volts)
-        with self._lock:
-            self.samples_setpoint.append((t,sccm))
+        if self._pi_running:
+            with self._lock:
+                self.samples_setpoint.append((t,sccm))
         self.logger.info(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
 
     def read_flow(self) -> float:
@@ -200,8 +205,9 @@ class subsystemMFC:
             volts = self._parent.tasks["ai_poll"].read()
         sccm = volts /self.v_per_sccm
         t = time.perf_counter()
-        with self._lock:
-            self.samples_readback.append((t,sccm))
+        if self._pi_running:
+            with self._lock:
+                self.samples_readback.append((t,sccm))
         return sccm
     
     def start_pi(self, target_sccm:float, settled_event: threading.Event,
