@@ -24,53 +24,57 @@ class NIDAQEquipment(Equipment):
         self.feedthrough = subsystemFeedthrough(self)
 
     def connect(self):
-        self.logger.info("Starting NIDAQ tasks")
+        if self._connected:
+            self.logger.warning("connect() called but already connected")
+            return
+        else:
+            self.logger.info("Starting NIDAQ tasks")
 
-        ai_cont = nidaqmx.Task()
-        ai_cont.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai0",
-                                                name_to_assign_to_channel="KJL_pressure",
-                                                min_val=0,
-                                                max_val=10,
-                                                terminal_config=TerminalConfiguration.DIFF
-                                                )
-        ai_cont.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai1",
-                                                name_to_assign_to_channel="MKS_pressure",
-                                                min_val=0,
-                                                max_val=10,
-                                                terminal_config=TerminalConfiguration.DIFF
-                                                )
-        self.tasks["ai_continuous"] = ai_cont
+            ai_cont = nidaqmx.Task()
+            ai_cont.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai0",
+                                                    name_to_assign_to_channel="KJL_pressure",
+                                                    min_val=0,
+                                                    max_val=10,
+                                                    terminal_config=TerminalConfiguration.DIFF
+                                                    )
+            ai_cont.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai1",
+                                                    name_to_assign_to_channel="MKS_pressure",
+                                                    min_val=0,
+                                                    max_val=10,
+                                                    terminal_config=TerminalConfiguration.DIFF
+                                                    )
+            self.tasks["ai_continuous"] = ai_cont
 
-        ai_poll = nidaqmx.Task()
-        ai_poll.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai3",
-                                                name_to_assign_to_channel="MFC_flow",
-                                                min_val=0,
-                                                max_val=5,
-                                                terminal_config=TerminalConfiguration.DIFF
-                                                )
-        self.tasks["ai_poll"] = ai_poll
+            ai_poll = nidaqmx.Task()
+            ai_poll.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai3",
+                                                    name_to_assign_to_channel="MFC_flow",
+                                                    min_val=0,
+                                                    max_val=5,
+                                                    terminal_config=TerminalConfiguration.DIFF
+                                                    )
+            self.tasks["ai_poll"] = ai_poll
 
-        ao = nidaqmx.Task()
-        ao.ao_channels.add_ao_voltage_chan(f"{self.device_id}/ao1",
-                                           name_to_assign_to_channel="MFC_setpoint",
-                                           min_val=0,
-                                           max_val=5
-                                           )
-        self.tasks["ao"] = ao
+            ao = nidaqmx.Task()
+            ao.ao_channels.add_ao_voltage_chan(f"{self.device_id}/ao1",
+                                            name_to_assign_to_channel="MFC_setpoint",
+                                            min_val=0,
+                                            max_val=5
+                                            )
+            self.tasks["ao"] = ao
 
-        do_valves = nidaqmx.Task()
-        do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line1", name_to_assign_to_lines="Vent")
-        do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line0", name_to_assign_to_lines="MainPump")
-        do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line2", name_to_assign_to_lines="SmallPump")
-        self.tasks["do_valves"] = do_valves
+            do_valves = nidaqmx.Task()
+            do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line1", name_to_assign_to_lines="Vent")
+            do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line0", name_to_assign_to_lines="MainPump")
+            do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line2", name_to_assign_to_lines="SmallPump")
+            self.tasks["do_valves"] = do_valves
 
-        do_feedthrough = nidaqmx.Task()
-        do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line2", name_to_assign_to_lines="PUL")
-        do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line1", name_to_assign_to_lines="DIR")
-        self.tasks["do_feedthrough"] = do_feedthrough
+            do_feedthrough = nidaqmx.Task()
+            do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line2", name_to_assign_to_lines="PUL")
+            do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line1", name_to_assign_to_lines="DIR")
+            self.tasks["do_feedthrough"] = do_feedthrough
 
-        self._connected = True
-        self.logger.info("NIDAQ tasks configured")
+            self._connected = True
+            self.logger.info("NIDAQ tasks configured")
 
     def disconnect(self):
         self.pressure.stop()
@@ -83,7 +87,7 @@ class NIDAQEquipment(Equipment):
             except Exception as e:
                 self.logger.exception(f"Error closing task {name}")
         self.tasks.clear()
-        self._connected = True
+        self._connected = False
 
     def getStatus(self) -> dict:
         p1, p2 = self.pressure.latest
@@ -98,10 +102,10 @@ class NIDAQEquipment(Equipment):
 
 
     # Pressure Subsystem Wrappers
-    def start_pressure_acquistion(self):
+    def start_pressure_acquisition(self):
         self.pressure.start()
 
-    def stop_pressure_acquistion(self):
+    def stop_pressure_acquisition(self):
         self.pressure.stop()
 
     def clear_pressure_buffer(self):
@@ -111,6 +115,14 @@ class NIDAQEquipment(Equipment):
 
     # Feedthrough Subsystem Wrappers
 
+    # Valve Subsystem Wrappers
+    def open_valve(self, valve: int):
+        self.valves.close_all()
+        self.valves.open(valve)
+
+    def close_valves(self):
+        self.valves.close_all()
+
 class subsystemPressure:
     def __init__(self, parent:NIDAQEquipment):
         self._parent = parent
@@ -118,6 +130,9 @@ class subsystemPressure:
         self._lock = threading.Lock()
         self._running = False
         self._thread = None
+
+        self.pressure_min = 0.11 #Torr #MKS Sensor
+        self.pressure_max = 10 #Torr #MKS Sensor
 
         self.samples_kjl: list[tuple[float, float]] = [] #(t, value)
         self.samples_mks: list[tuple[float, float]] = []
@@ -157,6 +172,9 @@ class subsystemPressure:
                     timeout=1
                 )
                 t=time.perf_counter()
+                kjl = 10**(np.array(data[0])-5)
+                mks = (np.array(data[1])/10)*(self.pressure_max-self.pressure_min)+self.pressure_min
+                data = (kjl, mks)
                 with self._lock:
                     self.samples_kjl.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[0])]

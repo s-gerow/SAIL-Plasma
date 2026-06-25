@@ -35,10 +35,14 @@ class IndicatorButton(tk.Checkbutton):
         "small": 15,
         "large": 50,
     }
+    STATES = {
+        0:"disconnected",
+        1:"connected"
+    }
 
     def __init__(self, parent, size: str = "small", text: str = "",
                  variable:str | None = None, on_color: str = IND_ON, off_color: str = IND_OFF,
-                 **kwargs):
+                 command=None,**kwargs):
         px = self.SIZES.get(size, 15)
 
         self._on_image  = tk.PhotoImage(width=px, height=px)
@@ -46,7 +50,10 @@ class IndicatorButton(tk.Checkbutton):
         self._on_image.put(on_color,  to=(0, 0, px-1, px-1))
         self._off_image.put(off_color, to=(0, 0, px-1, px-1))
 
-        self._state = False
+
+        self._var = tk.IntVar(value=0)
+        self._state = 0
+        self._validated = False
 
         super().__init__(
             parent,
@@ -54,7 +61,6 @@ class IndicatorButton(tk.Checkbutton):
             selectimage=self._on_image,
             text=text,
             compound="left",       # image left of text
-            variable=variable,
             # bg=BG_SURFACE,
             # fg=FG_MUTED,
             # activebackground=BG_SURFACE,
@@ -62,9 +68,15 @@ class IndicatorButton(tk.Checkbutton):
             relief="flat",
             borderwidth=0,
             font=("Courier New", 9),
+            command=self._on_click,
+            onvalue=1,
+            offvalue=0,
+            variable=self._var,
             **kwargs,
-            state="disabled"
+            #state="disabled"
+            
         )
+        self._external_command = command
 
     def set(self, state: bool):
         self._state = state
@@ -79,6 +91,11 @@ class IndicatorButton(tk.Checkbutton):
         self._on_image.put(color, to=(0, 0, px-1, px-1))
         if self._state:
             self.config(image=self._on_image)
+
+    def _on_click(self):
+        self._var.set(1 if self._state else 0)
+        if self._external_command:
+            self._external_command(f"{self.STATES[self._state]} | validated: {self._validated}")
 
     @property
     def state(self) -> bool:
@@ -129,7 +146,7 @@ class ValueLabel(tk.Label):
             font=("TkDefaultFont", 10),
             relief="solid",
             borderwidth=1,
-            padx=6,
+            padx=2,
             pady=2,
             anchor="e",
             width=10,
@@ -158,32 +175,44 @@ class ValueDisplay(tk.Frame):
         else:
             self._var = textvariable
 
-        tk.Label(
+        if unit:
+            self._unit = True
+
+        self.lbl = tk.Label(
             self,
             text=label,
             # bg=BG_SURFACE,
             # fg=FG_MUTED,
             font=("TkDefaultFont", 9),
             anchor="w",
-            width=12,
-        ).pack(side="left")
+            width=6,
+        )
+        self.lbl.pack(side="left")
 
         ValueLabel(
             self,
             textvariable=self._var,
         ).pack(side="left", padx=2)
 
-        if unit:
-            tk.Label(
+        if self._unit:
+            self.ul = tk.Label(
                 self,
                 text=unit,
                 # bg=BG_SURFACE,
                 # fg=FG_MUTED,
                 font=("TkDefaultFont", 9),
-            ).pack(side="left", padx=(2, 0))
+            )
+            self.ul.pack(side="left", padx=(2, 0))
 
     def set(self, value):
         self._var.set(str(value))
 
     def get(self):
         return self._var.get()
+    
+    def set_unit(self, unit:str):
+        if self._unit:
+            self.ul.config(text=unit)
+
+    def set_lbl(self, lbl:str):
+        self.lbl.config(text=lbl)

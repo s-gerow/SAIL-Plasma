@@ -27,7 +27,7 @@ class BaseFrame(tk.LabelFrame):
         self.frame = tk.Frame(self)
         self.frame.pack(fill="both", expand=True)
 
-        self.connect_indicator = IndicatorButton(self._status_frame, "small", off_color=IND_ERROR, on_color=IND_WARN)
+        self.connect_indicator = IndicatorButton(self._status_frame, "small", off_color=IND_ERROR, on_color=IND_WARN, command=self.logger.debug)
         self.connect_indicator.pack(side="left")
 
         self.connect_button = tk.Button(self._status_frame, text="Connect", command=self._connect)
@@ -45,19 +45,16 @@ class BaseFrame(tk.LabelFrame):
         if isinstance(result, ConnectResult):
             if result.success:
                 self.connect_indicator.set_color(IND_WARN)
-                self.connect_indicator.set(True)
+                self.connect_indicator.set(1)
                 self.connect_button.config(text="Disconnect", command=self._disconnect)
             else:
-                self.connect_indicator.set(False)
+                self.connect_indicator.set(0)
         elif isinstance(result, DisconnectResult):
             if result.success:
-                self.connect_indicator.set(False)
+                self.connect_indicator.set(0)
                 self.connect_button.config(text="Connect", command=self._connect)
             else:
-                self.connect_indicator.set(False)
+                self.connect_indicator.set(0)
 
     def handle_result(self, result: ActionResult):
         self.logger.debug(f"Unhandled action '{result.action}'")
-
-
-    

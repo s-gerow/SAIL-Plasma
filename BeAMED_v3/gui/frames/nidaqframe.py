@@ -7,7 +7,7 @@ import time
 from collections import deque
 
 from datatypes import ActionResult, ConnectResult
-from gui.frames.styles import HeaderLabel, IND_ON
+from gui.frames.styles import HeaderLabel, IND_ON, ValueDisplay
 from gui.frames.baseframe import BaseFrame
 from threadcontroller import Controller
 
@@ -35,7 +35,7 @@ class PressureFrame(BaseFrame):
         self._build_plot()
 
     def _build_controls(self):
-        control_col = tk.Frame(self)
+        control_col = tk.Frame(self.frame)
         control_col.pack(fill="y",side="right")
 
         control_col.columnconfigure(0,weight=1)
@@ -66,22 +66,20 @@ class PressureFrame(BaseFrame):
         HeaderLabel(control_col, text="PI Controller").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Label(control_col, text="K_p").grid(row=row_num, column=0)
-        self._pressure_monitor_params["pi_kp"] = tk.DoubleVar(value=0.0)
+        self._pressure_monitor_params["pi_kp"] = tk.DoubleVar(value=0.1)
         ttk.Spinbox(control_col, 
                     textvariable=self._pressure_monitor_params["pi_kp"],
                     from_=0,
                     to=1,
-                    state="disabled",
-                    increment=0.1).grid(row=row_num,column=1)
+                    increment=0.05).grid(row=row_num,column=1)
         row_num += 1
         tk.Label(control_col, text="K_i").grid(row=row_num, column=0)
-        self._pressure_monitor_params["pi_ki"] = tk.DoubleVar(value=0.0)
+        self._pressure_monitor_params["pi_ki"] = tk.DoubleVar(value=0.005)
         ttk.Spinbox(control_col, 
                     textvariable=self._pressure_monitor_params["pi_kp"],
                     from_=0,
                     to=1,
-                    state="disabled",
-                    increment=0.01).grid(row=row_num,column=1)
+                    increment=0.001).grid(row=row_num,column=1)
         row_num += 1
         tk.Button(control_col, text="Configure PI Controller").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
@@ -95,26 +93,26 @@ class PressureFrame(BaseFrame):
         # Valve Control Panel
         HeaderLabel(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Vent Chamber").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Vent Chamber", command=lambda:self._control_valve(1)).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Pump Chamber (main)").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Pump Chamber (main)", command=lambda:self._control_valve(0)).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Pump Chamber (secondary)").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Pump Chamber (secondary)", command=lambda: self._control_valve(2)).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Close Valves").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Close Valves", command=self._close_valves).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         
     def _build_readout(self):
-        row = tk.Frame(self)
+        row = tk.Frame(self.frame)
         row.pack(fill="x", side="top")
 
-        tk.Label(row, text="KJL").pack(side="left")
-        self._kjl_var = tk.StringVar(value = "--- V")
-        tk.Label(row, textvariable=self._kjl_var).pack(side="left")
+        self._kjl_var = tk.StringVar(value = "---")
+        ValueDisplay(row, "KJL", unit = "Torr", textvariable=self._kjl_var).pack(side="left")
 
-        tk.Label(row, text="MKS").pack(side="left")
-        self._mks_var = tk.StringVar(value = "--- V")
-        tk.Label(row, textvariable=self._mks_var).pack(side="left")
+        self._mks_var = tk.StringVar(value = "---")
+        ValueDisplay(row, "MKS", unit="Torr", textvariable=self._mks_var).pack(side="left")
+
+
 
     def _build_plot(self):
         self.fig = Figure(figsize=(5,3), dpi=100)
@@ -126,19 +124,12 @@ class PressureFrame(BaseFrame):
 
         self.ax.legend()
 
-        self.canvas = FigureCanvasTkAgg(self.fig, self)
+        self.canvas = FigureCanvasTkAgg(self.fig, self.frame)
         NavigationToolbar2Tk(self.canvas, self).pack(fill="x")
         self.canvas.get_tk_widget().pack(side="bottom",fill="both", expand=True)
 
     def _style_axes(self):
         self.logger.warning(f"{type(self).__name__} does not implement _style_axes() yet")
-
-    def handle_connect_result(self, result: ConnectResult):
-        if result.success:
-            self.connect_indicator.set_color(IND_ON)
-            self.connect_indicator.set(True)
-        else:
-            self.connect_indicator.set(False)
 
     def _start(self):
         self.controller.run("nidaq_start_pressure", self.equipment, "start_pressure_acquisition")
@@ -160,6 +151,24 @@ class PressureFrame(BaseFrame):
         self._line_mks.set_data([],[])
         self.canvas.draw()
 
+    def _control_valve(self, valve: int):
+        self.controller.run(f"nidaq_open_valve_{valve}", self.equipment, "open_valve", valve=valve)
+
+    def _close_valves(self):
+        self.controller.run("nidaq_close_valves",self.equipment,"close_valves")
+
+    def _configure_pi(self):
+        pass
+
+    def _start_pi(self):
+        pass
+
+    def _stop_pi(self):
+        pass
+
+    def _clear_pi(self):
+        pass
+
     def _poll(self):
         if not self._running:
             return
@@ -173,8 +182,8 @@ class PressureFrame(BaseFrame):
         self._kjl_pressure.append(kjl)
         self._mks_pressure.append(mks)
 
-        self._kjl_var.set(f"{kjl:.4f} V")
-        self._mks_var.set(f"{mks:.4f} V")
+        self._kjl_var.set(f"{kjl:.4f}")
+        self._mks_var.set(f"{mks:.4f}")
 
         self._update_plot()
 

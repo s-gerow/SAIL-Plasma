@@ -95,3 +95,10 @@ class PowerSeries:
     current: np.ndarray
     time: np.ndarray
     t_discharge: float
+
+@dataclass
+class DMMSeries:
+    samples_voltage:  list[tuple[float, float]] = field(default_factory=list)
+    samples_resistance: list[tuple[float, float]] = field(default_factory=list)
+    t_trigger:        float | None = None
+    trigger_source:   str   | None = None
