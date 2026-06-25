@@ -13,7 +13,7 @@ def main():
     init_logging(log_dir="logs", level="INFO")
 
     rm = pyvisa.ResourceManager()
-    oscope = SiglentSDS1204XE(rm)
+    oscope = SiglentSDS1204XE(rm, name="osc")
     nidaq = NIDAQEquipment()
     dmm = KeithleyDMM6500(rm)
     pwr = Keithley2260B_800_1(rm)
@@ -29,3 +29,4 @@ def main():
 
 if __name__=="__main__":
     main()
+ 

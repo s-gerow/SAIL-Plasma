@@ -3,33 +3,7 @@ import queue
 import logging
 from typing import Any
 from equipment.baseequipment import Equipment
-from dataclasses import dataclass, field
-
-@dataclass
-class ConnectResult:
-    key: str
-    success: bool
-    error: str = None
-
-@dataclass
-class ActionResult:
-    key: str
-    action: str
-    success: bool
-    data: dict = field(default_factory=dict)
-    error: str = None
-
-@dataclass
-class StepResult:
-    step_name: str
-    success: bool
-    data: dict = field(default_factory=dict)
-    error: str = None
-
-@dataclass
-class SequenceComplete:
-    success: bool
-    aborted: bool = False
+from datatypes import ConnectResult, ActionResult, DisconnectResult
 
 
 class Controller:
@@ -69,6 +43,11 @@ class Controller:
         for t in threads:
             t.join(timeout=10)
 
+    def connect(self, key:str):
+        equipment = self.get(key)
+        t = threading.Thread(target=self._connect_instrument, args=(key,equipment), daemon=True, name=f"Connect {key}")
+        t.start()
+
     def _connect_instrument(self, key:str, equipment: Equipment):
         try:
             self.logger.info(f"Connecting {key}...")
@@ -83,12 +62,19 @@ class Controller:
             if equipment.isConnected():
                 self._disconnect_instrument(key,equipment)
 
+    def disconnect(self, key:str):
+        equipment = self.get(key)
+        t = threading.Thread(target=self._disconnect_instrument, args=(key,equipment), daemon=True, name=f"Disconnect {key}")
+        t.start()
+    
     def _disconnect_instrument(self, key: str, equipment: Equipment):
         try:
             equipment.disconnect()
             self.logger.info(f"Disconnected {key}")
+            self.queue.put(DisconnectResult(key=key, success=True))
         except Exception as e:
             self.logger.exception(f"Error disconnecting {key}")
+            self.queue.put(DisconnectResult(key=key, success=False, error=str(e)))
 
     def run(self, action: str, target: str, method: str, **kwargs):
         '''

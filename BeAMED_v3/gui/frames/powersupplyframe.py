@@ -4,17 +4,17 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import logging
 
+from gui.frames.baseframe import BaseFrame
 from threadcontroller import Controller, ActionResult
 
-class PowerFrame(tk.LabelFrame):
-    def __init__(self, parent, controller: Controller):
-        super().__init__(parent, text="Keithley 2260B-800-1")
-        self.controller = controller
-        self.logger = logging.getLogger("BeAMED.gui.pwr")
+class PowerFrame(BaseFrame):
+    def __init__(self, parent, controller: Controller, equipment_name:str, text:str="Keithley 2260B-800-1"):
+        super().__init__(parent, controller, equipment_name, text)
         self._build()
 
     def _build(self):
-        btn_col = tk.Frame(self)
+        super()._build()
+        btn_col = tk.Frame(self.frame)
         btn_col.pack(fill="both", expand=True, side="top")
 
         tk.Label(btn_col, text="filler label")

@@ -4,30 +4,9 @@ from typing import Literal
 
 import numpy as np
 import pyvisa
-from dataclasses import dataclass
 
 from equipment.visaequipment import VisaEquipment
-
-@dataclass
-class Waveform:
-    """
-    Dataclass to store processed waveform data from oscilloscope and additional relevant parameters.
-
-    Attributes
-    __________
-    voltage : np.ndarray
-        Array of vertical axis values representing the voltage data.
-    time : np.ndarray
-        Array of horizontal axis values representing timeseries data.
-    dy : float
-        Floating point decimal value representing the magnitude of the voltage peak which triggered the discharge.
-    t_discharge : float
-        Floating point decimal result of time.time() call at the moment the discharge is detected by the oscilloscope.
-    """
-    voltage: np.ndarray
-    time: np.ndarray
-    dy: float
-    t_discharge: float
+from datatypes import Waveform
 
 class SiglentSDS1204XE(VisaEquipment):
     """

@@ -4,6 +4,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import logging
 
+from gui.frames.styles import ValueLabel, HeaderLabel
 from threadcontroller import Controller, ActionResult
 
 
@@ -40,7 +41,7 @@ class ExperimentInputFrame(tk.LabelFrame):
         
         # Power Supply Set-Up
         row_num = 0
-        tk.Label(input_col, text="Power Set-Up").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(input_col, text="Power Set-Up").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Label(input_col, text="Starting Input Voltage (V)").grid(row=row_num, column=0)
         self._input_vars["pwr_volt_start"] = tk.DoubleVar(value=0.0)
@@ -61,7 +62,7 @@ class ExperimentInputFrame(tk.LabelFrame):
         row_num += 1
         
         # Electrode
-        tk.Label(input_col, text="Electrode Set-Up").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(input_col, text="Electrode Set-Up").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Label(input_col, text="Electrode Position (cm)").grid(row=row_num, column=0)
         self._input_vars["feedthrough_pos"] = tk.DoubleVar(value=0.5)
@@ -89,7 +90,7 @@ class ExperimentInputFrame(tk.LabelFrame):
         row_num += 1
         
         # Pressure
-        tk.Label(input_col, text="Pressure Set-Up").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(input_col, text="Pressure Set-Up").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Label(input_col, text="Pressure Min (Torr)").grid(row=row_num, column=0)
         self._input_vars["pressure_min"] = tk.DoubleVar(value=0.1)
@@ -127,7 +128,7 @@ class ExperimentInputFrame(tk.LabelFrame):
         row_num += 1
 
         # Control Panel
-        tk.Label(input_col, text="Control Panel").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(input_col, text="Control Panel").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Button(input_col, text="Configure Series").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
@@ -151,7 +152,6 @@ class ExperimentOutputFrame(tk.LabelFrame):
                              ("kjl_pressure", "KJL Discharge Pressure (Torr)"),
                              ("mks_pressure", "MKS Discharge Pressure (Torr)"),
                              ("osc_dv", "Oscilloscope Trigger (V)"),
-                             ("trigger_method", "Trigger Method"),
                              )
         self._output_vars: dict[str, tk.Variable] = {} 
 
@@ -163,6 +163,6 @@ class ExperimentOutputFrame(tk.LabelFrame):
         for i, (var, name) in enumerate(self._output_names):
             self._output_vars[var] = tk.DoubleVar(value=0.0)
             tk.Label(output_col, text=name).grid(row=i, column=0)
-            tk.Label(output_col, text=f"{self._output_vars[var].get():.3f}").grid(row=i, column=1)
+            ValueLabel(output_col, text=f"{self._output_vars[var].get():.3f}").grid(row=i, column=1)
 
 

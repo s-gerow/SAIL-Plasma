@@ -7,12 +7,14 @@ from tkinter import ttk
 from gui.logger import QueueHandler
 from gui.terminal import BenchTerminal
 from gui.threadmonitor import ThreadMonitor
+from gui.frames.baseframe import BaseFrame
 from gui.frames.oscilloscopeframe import OscilloscopeFrame
 from gui.frames.nidaqframe import PressureFrame
 from gui.frames.multimeterframe import MultimeterFrame
 from gui.frames.powersupplyframe import PowerFrame
 from gui.frames.experimentframe import ExperimentControlFrame
-from threadcontroller import Controller, ConnectResult, ActionResult
+from threadcontroller import Controller
+from datatypes import ConnectResult, ActionResult, DisconnectResult
 
 class BeAMEDWindow(tk.Tk):
     POLL_INTERVAL_MS = 50
@@ -87,20 +89,27 @@ class BeAMEDWindow(tk.Tk):
 
         self.exp_controller.input_frame.grid(row=0, column=0, sticky="nsew")
 
-        self.dmm_frame = MultimeterFrame(self.main_frame, self.controller)
+        self.dmm_frame = MultimeterFrame(self.main_frame, self.controller, self.controller.get("dmm").getName())
         self.dmm_frame.grid(row=1, column=0, sticky="nsew")
 
-        self.osc_frame = OscilloscopeFrame(self.main_frame, self.controller)
+        self.osc_frame = OscilloscopeFrame(self.main_frame, self.controller, self.controller.get("osc").getName())
         self.osc_frame.grid(row=0, column=3, columnspan=2, sticky="nsew")
 
         self.pressure_frame = PressureFrame(self.main_frame, self.controller)
         self.pressure_frame.grid(row=0, column=1, columnspan=2, sticky="nsew")
         
-        self.pwr_frame = PowerFrame(self.main_frame, self.controller)
+        self.pwr_frame = PowerFrame(self.main_frame, self.controller, self.controller.get("pwr").getName())
         self.pwr_frame.grid(row=1, column=1, sticky="nsew")
 
         tk.Frame(self.main_frame, bg="#47B3FC").grid(row=1, column=2, sticky="nsew")
         self.exp_controller.output_frame.grid(row=1, column=3, columnspan=2, sticky="nsew")
+
+        self._frame_map: dict[str, BaseFrame] = {
+            "osc": self.osc_frame,
+            "dmm": self.dmm_frame,
+            "pwr": self.pwr_frame,
+            "nidaq": self.pressure_frame
+        }
 
     def _build_namespace(self) -> dict:
         """
@@ -190,20 +199,33 @@ class BeAMEDWindow(tk.Tk):
 
     def _route_result(self, result):
         if isinstance(result, ConnectResult):
+            frame = self._frame_map.get(result.key)
+            if frame:
+                frame.handle_connect_result(result)
             if result.success:
                 self.logger.info(f"Connected: {result.key}")
             else:
                 self.logger.error(f"Failed to connect {result.key}: {result.error}")
+        elif isinstance(result, DisconnectResult):
+            frame = self._frame_map.get(result.key)
+            if frame:
+                frame.handle_connect_result(result)
+            if result.success:
+                self.logger.info(f"Disconnected: {result.key}")
+            else:
+                self.logger.error(f"Failed to disconnect {result.key}: {result.error}")
         elif isinstance(result, ActionResult):
-            if result.action.startswith("osc_"):
-                self.osc_frame.handle_result(result)
-            elif result.action in ("query"):
+            if result.action == "query":
                 if result.success:
                     self.logger.info(f"RESPONSE: {result.data['result']}")
                 else:
                     self.logger.error(f"Query failed: {result.error}")
             else:
-                self.logger.warning(f"Unhandled action result: {result.action}")
+                frame = self._frame_map.get(result.key)
+                if frame:
+                    frame.handle_result(result)
+                else:
+                    self.logger.warning(f"Unhandled action result: {result.action}")
         else:
             self.logger.warning(f"Unkown result type on queue: {type(result)}")
 

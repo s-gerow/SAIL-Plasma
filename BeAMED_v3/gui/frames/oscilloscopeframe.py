@@ -4,23 +4,23 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import logging
 
-from threadcontroller import Controller, ActionResult
-from equipment.oscilloscope import Waveform
+from gui.frames.baseframe import BaseFrame
+from threadcontroller import Controller
+from datatypes import ActionResult, Waveform
 
-class OscilloscopeFrame(tk.LabelFrame):
+class OscilloscopeFrame(BaseFrame):
 
-    def __init__(self, parent, controller: Controller):
-        super().__init__(parent, text="Siglent SDS1240X-E")
-        self.controller = controller
-        self.logger = logging.getLogger("BeAMED.gui.oscilloscope")
+    def __init__(self, parent, controller: Controller, equipment_name: str, text: str = "Siglent SDS1240X-E"):
+        super().__init__(parent, controller, equipment_name, text)
         self._build()
 
     def _build(self):
+        super()._build()
         self._build_widgets()
         self._build_figure()
 
     def _build_widgets(self):
-        btn_row = tk.Frame(self,relief="solid")
+        btn_row = tk.Frame(self.frame,relief="solid")
         btn_row.pack(fill="x")
 
         for text, action, method in [
@@ -35,25 +35,21 @@ class OscilloscopeFrame(tk.LabelFrame):
         self.ax = self.figure.add_subplot(111)
         self._style_axes()
 
-        self.canvas = FigureCanvasTkAgg(self.figure, self)
+        self.canvas = FigureCanvasTkAgg(self.figure, self.frame)
         NavigationToolbar2Tk(self.canvas, self).pack(fill="x")
         self.canvas.get_tk_widget().pack(fill="both", expand=False)
 
     def _style_axes(self):
         self.logger.warning(f"{type(self).__name__} does not implement _style_axes() yet")
-    
-    def _run(self, action: str, method: str, **kwargs):
-        self.controller.run(action, "Oscilloscope", method, **kwargs)
 
     def _capture(self):
         self.logger.info("Capturing Oscilloscope View")
-        self.controller.run("osc_capture", "Oscilloscope", "capture")
+        self._run(action="osc_capture", method="capture")
 
     def handle_result(self, result: ActionResult):
         if not result.success:
             self.logger.error(f"Oscilloscope action failed: {result.error}")
             return
-
         if result.action == "osc_capture":
             self._plot_waveform(result.data["result"])
         elif result.action == "osc_write":

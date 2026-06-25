@@ -95,7 +95,21 @@ class NIDAQEquipment(Equipment):
             "valve_states": self.valves.states,
             "feedthrough": self.feedthrough.get_status()
         }
-        
+
+
+    # Pressure Subsystem Wrappers
+    def start_pressure_acquistion(self):
+        self.pressure.start()
+
+    def stop_pressure_acquistion(self):
+        self.pressure.stop()
+
+    def clear_pressure_buffer(self):
+        self.pressure.clear_buffer()
+
+    # MFC Subsystem Wrappers
+
+    # Feedthrough Subsystem Wrappers
 
 class subsystemPressure:
     def __init__(self, parent:NIDAQEquipment):

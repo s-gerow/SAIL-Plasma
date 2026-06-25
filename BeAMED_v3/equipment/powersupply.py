@@ -4,16 +4,9 @@ from typing import Literal
 
 import numpy as np
 import pyvisa
-from dataclasses import dataclass
 
 from equipment.visaequipment import VisaEquipment
-
-@dataclass
-class PowerSeries:
-    voltage: np.ndarray
-    current: np.ndarray
-    time: np.ndarray
-    t_discharge: float
+from datatypes import PowerSeries
 
 class Keithley2260B_800_1(VisaEquipment):
     def __init__(self, manager: pyvisa.ResourceManager, name: str = "pwr",  resource_id: str = "ASRL4::INSTR"):

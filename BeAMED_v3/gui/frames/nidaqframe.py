@@ -6,17 +6,18 @@ import logging
 import time
 from collections import deque
 
+from datatypes import ActionResult, ConnectResult
+from gui.frames.styles import HeaderLabel, IND_ON
+from gui.frames.baseframe import BaseFrame
 from threadcontroller import Controller
 
-class PressureFrame(tk.LabelFrame):
+class PressureFrame(BaseFrame):
     POLL_MS = 100
     WINDOW_S = 60
     MAX_POINTS = 600
 
-    def __init__(self, parent, controller: Controller):
-        super().__init__(parent, text = "Pressure")
-        self.controller = controller
-        self.logger = logging.getLogger("BeAMED.gui.pressure")
+    def __init__(self, parent, controller: Controller, equipment_name = "nidaq", text="Pressure"):
+        super().__init__(parent, controller, equipment_name, text)
 
         self._t_start = time.perf_counter()
         self._times = deque(maxlen=self.MAX_POINTS)
@@ -28,6 +29,7 @@ class PressureFrame(tk.LabelFrame):
         self._build()
 
     def _build(self):
+        super()._build()
         self._build_controls()
         self._build_readout()
         self._build_plot()
@@ -38,12 +40,10 @@ class PressureFrame(tk.LabelFrame):
 
         control_col.columnconfigure(0,weight=1)
         control_col.columnconfigure(1,weight=1)
-
-        mfc = self.controller.registry.get("nidaq").mfc
         
         # Pressure Monitor Set-Up
         row_num = 0
-        tk.Label(control_col, text="Pressure Monitor").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(control_col, text="Pressure Monitor").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Label(control_col, text="Poll Frequency (ms)").grid(row=row_num, column=0)
         self._pressure_monitor_params["poll_freq"] = tk.DoubleVar(value=self.POLL_MS)
@@ -63,7 +63,7 @@ class PressureFrame(tk.LabelFrame):
         row_num += 1
 
         # PI Control Panel
-        tk.Label(control_col, text="PI Controller").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(control_col, text="PI Controller").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Label(control_col, text="K_p").grid(row=row_num, column=0)
         self._pressure_monitor_params["pi_kp"] = tk.DoubleVar(value=0.0)
@@ -93,7 +93,7 @@ class PressureFrame(tk.LabelFrame):
         row_num += 1
 
         # Valve Control Panel
-        tk.Label(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
+        HeaderLabel(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Button(control_col, text="Vent Chamber").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
@@ -133,21 +133,22 @@ class PressureFrame(tk.LabelFrame):
     def _style_axes(self):
         self.logger.warning(f"{type(self).__name__} does not implement _style_axes() yet")
 
+    def handle_connect_result(self, result: ConnectResult):
+        if result.success:
+            self.connect_indicator.set_color(IND_ON)
+            self.connect_indicator.set(True)
+        else:
+            self.connect_indicator.set(False)
+
     def _start(self):
-        nidaq = self.controller.registry.get("nidaq")
-        if nidaq is None:
-            self.logger.error("NIDAQ not registered")
-            return
-        nidaq.pressure.start()
+        self.controller.run("nidaq_start_pressure", self.equipment, "start_pressure_acquisition")
         self._running = True
         self._poll()
         self.logger.info("Pressure display started")
 
     def _stop(self):
         self._running = False
-        nidaq = self.controller.registry.get("nidaq")
-        if nidaq:
-            nidaq.pressure.stop()
+        self.controller.run("nidaq_stop_pressure",self.equipment,"stop_pressure_acquisition")
         self.logger.info("Pressure display stopped")
 
     def _clear(self):
@@ -163,9 +164,7 @@ class PressureFrame(tk.LabelFrame):
         if not self._running:
             return
         
-        nidaq = self.controller.registry.get("nidaq")
-        if nidaq is None:
-            return
+        nidaq = self.controller.get(self.equipment)
         
         kjl, mks = nidaq.pressure.latest
         t = time.perf_counter() - self._t_start
