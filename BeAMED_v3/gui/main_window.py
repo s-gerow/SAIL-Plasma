@@ -119,7 +119,9 @@ class BeAMEDWindow(tk.Tk):
             "controller": self.controller,
             "debug": lambda name: logging.getLogger(f"BeAMED.{name}").setLevel(logging.DEBUG),
             "quiet": lambda name: logging.getLogger(f"BeAMED.{name}").setLevel(logging.WARNING),
-            "IDN": lambda target: self.controller.run("query",target,"query",command="*IDN?")
+            "IDN": lambda target: self.controller.run("query",target,"query",command="*IDN?"),
+            "write": lambda target, command: self.controller.run("write", target, command),
+            "query": lambda target, command: self.controller.run("query", target, command)
         }
 
     def _toggle_terminal(self):

@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from typing import Callable
 
 # ── colours ───────────────────────────────────────────────────────────────────
 
@@ -216,3 +217,36 @@ class ValueDisplay(tk.Frame):
 
     def set_lbl(self, lbl:str):
         self.lbl.config(text=lbl)
+
+
+class EnableButton(tk.Checkbutton):
+        def __init__(self, parent, enable_command: str, disable_command:str, text_variable: tk.Variable, on_text:str = 'T: Enable', off_text:str = 'F: Disable',**kwargs):
+            self.true_image = tk.PhotoImage(width=15, height=15)
+            self.false_image = tk.PhotoImage(width=15, height = 15)
+            self.true_image.put(("lime"), to=(0,0,14,14))
+            self.false_image.put(("green"), to=(0,0,14,14))
+            self._var = text_variable
+            self._enable_command: Callable[..., any] = enable_command
+            self._disable_command: Callable[...,any] = disable_command
+            self.on_text = on_text
+            self.off_text = off_text
+            super().__init__(parent, 
+                             text = self.on_text,
+                             image = self.false_image,
+                             selectimage = self.true_image,
+                             indicatoron = False,
+                             compound= 'left',
+                             variable = self._var,
+                             onvalue="Enable",
+                             offvalue="Disable",
+                             command = self.toggle,
+                             **kwargs
+                            )
+        
+        def toggle(self):
+            if self._var.get() == "Enable":
+                self.configure(text=self.on_text)
+                self._enable_command()
+            elif self._var.get() == "Disable":
+                self.configure(text=self.off_text)
+                self._disable_command()

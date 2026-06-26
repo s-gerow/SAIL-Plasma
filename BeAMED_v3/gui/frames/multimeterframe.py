@@ -4,7 +4,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import logging
 
-from gui.frames.styles import HeaderLabel, ValueDisplay
+from gui.frames.styles import HeaderLabel, ValueDisplay, EnableButton
 from gui.frames.baseframe import BaseFrame
 from threadcontroller import Controller, ActionResult
 
@@ -24,6 +24,14 @@ class MultimeterFrame(BaseFrame):
 
 
         row_num = 0
+        tk.Label(btn_col, text="Auto Range (T:Enable)").grid(row=row_num, column=0)
+        self.auto_range = tk.StringVar(value="Disable")
+        EnableButton(btn_col, 
+                     self._enable_auto_range, 
+                     self._disable_auto_range, 
+                     self.auto_range).grid(row=row_num, column=1)
+
+        row_num += 1
         HeaderLabel(btn_col, "Output").grid(row=row_num, column=0, columnspan=2)
 
         row_num += 1
@@ -102,4 +110,10 @@ class MultimeterFrame(BaseFrame):
         self.meas.set(float(read))
 
         self.after(100, self._poll)
+
+    def _enable_auto_range(self):
+        self._run(a="dmm_auto_range_enable", m="enable_auto_range")
+
+    def _disable_auto_range(self):
+        self._run(a="dmm_auto_range_disable", m="disable_auto_range")
         

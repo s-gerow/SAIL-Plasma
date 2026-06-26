@@ -91,10 +91,10 @@ class Waveform:
 @dataclass
 class PowerSeries:
     """Voltage and current timeseries recorded by the power supply."""
-    voltage: np.ndarray
-    current: np.ndarray
-    time: np.ndarray
-    t_discharge: float
+    samples_voltage: list[tuple[float, float]] = field(default_factory=list)
+    samples_current: list[tuple[float, float]] = field(default_factory=list)
+    t_discharge: float | None = None
+    trigger_source:   str   | None = None
 
 @dataclass
 class DMMSeries:

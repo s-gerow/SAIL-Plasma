@@ -25,36 +25,40 @@ class KeithleyDMM6500(VisaEquipment):
         super().disconnect()
     
     def configure(self):
-        self.write("*RST")
-        self.write(f":SENS:FUNC 'VOLT:DC'")
-        self.write(f"SENS:VOLT:RANG:AUTO ON")
-        self.write(f":SENS:VOLT:NPLC 1") #Default 1
-        self.write(f":SENS:VOLT:LINE:SYNC OFF") #Default OFF
-        self.write(f"SENS:VOLT:AZER ON")#Default ON
-        
-        self.write(f"CALC2:VOLT:LIM1:STAT OFF") #Default OFF
-        self.write(f"CALC2:VOLT:LIM1:CLE:AUTO ON") #Limit Number in GUI is 1 (LIM_), Default ON
-        self.write(f"CALC2:VOLT:LIM1:LOW 0") #Because the voltage limit is disabled this should not be needed but may as well include it because maybe one day we do
-        self.write(f"CALC2:VOLT:LIM1:UPP 0")
-        self.write(f"TRAC:FILL:MODE CONT, 'defbuffer1'") #continuous fill
-        self.write(f"TRAC:POIN 1000 'defbuffer1'") #Buffer Size 10
+        with self._lock:
+            self.write("*RST")
+            self.write(f":SENS:FUNC 'VOLT:DC'")
+            self.write(f"SENS:VOLT:RANG:AUTO ON")
+            self.write(f":SENS:VOLT:NPLC 1") #Default 1
+            self.write(f":SENS:VOLT:LINE:SYNC OFF") #Default OFF
+            self.write(f"SENS:VOLT:AZER ON")#Default ON
+            
+            self.write(f"CALC2:VOLT:LIM1:STAT OFF") #Default OFF
+            self.write(f"CALC2:VOLT:LIM1:CLE:AUTO ON") #Limit Number in GUI is 1 (LIM_), Default ON
+            self.write(f"CALC2:VOLT:LIM1:LOW 0") #Because the voltage limit is disabled this should not be needed but may as well include it because maybe one day we do
+            self.write(f"CALC2:VOLT:LIM1:UPP 0")
+            self.write(f"TRAC:FILL:MODE CONT, 'defbuffer1'") #continuous fill
+            self.write(f"TRAC:POIN 1000 'defbuffer1'") #Buffer Size 10
         self.logger.info("DMM buffer configured for continuous acquisition")
 
     def func_select(self, func:str = "VOLT:DC"):
-        self.write(f':SENS:FUNC "{func}"')
+        with self._lock:
+            self.write(f':SENS:FUNC "{func}"')
         self._mode = func
     
     def measure(self):
         self._running = True
-        read = self.query(":READ?")
-        self._running =False
+        with self._lock:
+            read = self.query(":READ?")
+        self._running = False
         return read
     
     def start_continuous_measure(self):
         if self._running:
             self.logger.warning("Continuous dmm acquisition thread already runnning")
             return
-        self.write("INIT")
+        with self._lock:
+            self.write("INIT")
         time.sleep(0.1)
         self._running = True
         self._thread = threading.Thread(
@@ -73,6 +77,14 @@ class KeithleyDMM6500(VisaEquipment):
             self._thread.join(timeout=2)
         self.logger.info("DMM continuous acquisition stopped")
 
+    def enable_auto_range(self):
+        with self._lock:
+            self.write(f"SENS:{self._mode}:RANG:AUTO TRUE")
+
+    def disable_auto_range(self):
+        with self._lock:
+            self.write(f"SENS:{self._mode}:RANG:AUTO FALSE")
+
     def _acquire(self):
         self._cursor = 1
         while self._running:
@@ -80,7 +92,8 @@ class KeithleyDMM6500(VisaEquipment):
                 if not self._connected:
                     break
                 t = time.perf_counter()
-                values = float(self.query(":READ?"))
+                with self._lock:
+                    values = float(self.query(":READ?"))
                 readings = [(t, values)]
 
                 if self.series is not None:
@@ -96,8 +109,9 @@ class KeithleyDMM6500(VisaEquipment):
     def getStatus(self):
         base = super().get_status()
         if self._connected:
-            base["func"] = self.query(":FUNC?")
-            base["value"] = self.query(":READ?")
+            with self._lock:
+                base["func"] = self.query(":FUNC?")
+                base["value"] = self.query(":READ?")
         return base
     
     @property
