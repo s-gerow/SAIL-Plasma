@@ -64,7 +64,7 @@ class PowerFrame(BaseFrame):
                    ).grid(row=row_num, column=1)
         tk.Button(btn_col, 
                   text="Set",
-                  command=lambda v=self._set_voltage_var.get(): self._set_voltage(v),
+                  command=lambda: self._set_voltage(self._set_voltage_var.get()),
                   ).grid(row=row_num, column=2)
         
         row_num += 1
@@ -78,7 +78,7 @@ class PowerFrame(BaseFrame):
                    ).grid(row=row_num, column=1)
         tk.Button(btn_col, 
                   text="Set",
-                  command=lambda i=self._set_current_var.get(): self._set_current(i),
+                  command=lambda : self._set_current(self._set_current_var.get()),
                   ).grid(row=row_num, column=2)
         
     def _run(self, a, m, **kwargs):
@@ -102,10 +102,10 @@ class PowerFrame(BaseFrame):
         self._run("pwr_stop_output", "stop_output")
 
     def _set_voltage(self, voltage: str | float):
-        self._run("pwr_set_voltage", self.equipment, "set_voltage", voltage = voltage)
+        self._run("pwr_set_voltage","set_voltage", voltage = voltage)
 
     def _set_current(self, current: str | float):
-        self._run("pwr_set_current", self.equipment, "set_current", current = current)
+        self._run("pwr_set_current","set_current", current = current)
 
     def _poll(self):
         if not self._output:

@@ -10,7 +10,7 @@ from equipment.visaequipment import VisaEquipment
 from datatypes import PowerSeries
 
 class Keithley2260B_800_1(VisaEquipment):
-    def __init__(self, manager: pyvisa.ResourceManager, name: str = "pwr",  resource_id: str = "ASRL4::INSTR"):
+    def __init__(self, manager: pyvisa.ResourceManager, name: str = "pwr",  resource_id: str = "ASRL3::INSTR"):
         super().__init__(name, manager, resource_id)
         self._enabled = False
         self._output = False
@@ -100,7 +100,6 @@ class Keithley2260B_800_1(VisaEquipment):
     @property
     def latest(self) -> tuple[float, float]:
         if self._connected:
-            with self._lock:
-                volt = self.series.samples_voltage[-1][1] if self.series.samples_voltage else 0.0
-                curr = self.series.samples_current[-1][1] if self.series.samples_current else 0.0
+            volt = self.series.samples_voltage[-1][1] if self.series.samples_voltage else 0.0
+            curr = self.series.samples_current[-1][1] if self.series.samples_current else 0.0
         return volt, curr

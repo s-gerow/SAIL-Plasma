@@ -182,6 +182,10 @@ class subsystemPressure:
                     self.samples_mks.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[1])]
                     )
+                if self._parent.mfc._running:
+                    mfc_readback = self._parent.mfc.read_flow()
+                    output = self._parent.mfc.PI(self)
+                
             except nidaqmx.errors.DaqError as e:
                 self.logger.exception("Error reading pressure")
                 break
@@ -205,29 +209,55 @@ class subsystemMFC:
         self.logger = logging.getLogger("BeAMED.nidaq.mfc")
         self.kp = kp
         self.ki = ki
+        self.kd = 0
         self.v_per_sccm = v_per_sccm
 
-        self._pi_thread = None
-        self._pi_running = False
+        self._running = False
+        self._target = False
         self._integral = 0
+        self._error = 0
+        self._settled_event: threading.Event | None = None
+        self._settled_since: float | None = None
+        self._tolerance = 0.1
+        self._settle_time = 5.0
 
         self.samples_readback: list[tuple[float, float]] = []
         self.samples_setpoint: list[tuple[float, float]] = []
         self._lock = threading.Lock()
 
+    def PI(self, setpoint_torr: float, prev_val: float, dt:float):
+        VOLUME = 45.30695
+        with self._lock:
+            prev_err = self._error
+            integral = self._integral
+            kp = self.kp
+            ki = self.ki
+            kd = self.kd
+        error = setpoint_torr - prev_val
+        integral += error*dt
+        derivative = (error - prev_err) / dt
+        control = (kp * error) + (ki * integral) + (kd * derivative)
+        control_mod = (control*VOLUME)*(1.333224)*(1/0.0168875)*(5/100) #V
+        control_clamp = max(0.0, min((5.0, control_mod)))
+        with self._lock:
+            self._error = error
+            self._integral = integral
+        return control_clamp
+
     def set_PI(self, kp: float, ki: float):
-        self.kp = kp
-        self.ki = ki
+        with self._lock:
+            self.kp = kp
+            self.ki = ki
 
     def get_PI(self) -> tuple[float, float]:
         return (self.kp, self.ki)
     
     def set_flow(self, sccm: float):
         volts = sccm*self.v_per_sccm
-        t=time.perf_counter()
         with self._parent._task_lock:
             self._parent.tasks["ao"].write(volts)
-        if self._pi_running:
+        if self._running:
+            t=time.perf_counter()
             with self._lock:
                 self.samples_setpoint.append((t,sccm))
         self.logger.info(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
@@ -236,32 +266,27 @@ class subsystemMFC:
         with self._parent._task_lock:
             volts = self._parent.tasks["ai_poll"].read()
         sccm = volts /self.v_per_sccm
-        t = time.perf_counter()
         if self._pi_running:
+            t = time.perf_counter()
             with self._lock:
                 self.samples_readback.append((t,sccm))
         return sccm
     
     def start_pi(self, target_sccm:float, settled_event: threading.Event,
                  tolerance: float = 1.0, settle_time: float=5.0):
-        if self._pi_running:
+        if self._running:
             self.logger.warning("PI control loop already runnning")
             return
-        self._pi_running = True
+        self._running = True
         self._integral = 0.0
-        self._pi_thread = threading.Thread(target=self._pi_loop,
-                                           args=(target_sccm, settled_event, tolerance, settle_time),
-                                           daemon=True,
-                                           name="mfc_pi_control"
-                                           )
-        self._pi_thread.start()
         self.logger.info(f"PI control loop started with target: {target_sccm}")
 
-    def _pi_loop(self):
-        self.logger.warning(f"PI control loop not implemented properly, come back and change to pressure input rather than sccm input")
-
     def stop_pi(self):
-        self.logger.warning(f"PI control loop not implemented properly, come back and change to pressure input rather than sccm input")
+        self._running = False
+        self._integral = 0.0
+        self._settled_since = None
+        self.set_flow(0)
+        self.logger.info(f"PI control loop stopped")
 
 class subsystemValve:
     def __init__(self, parent:NIDAQEquipment):

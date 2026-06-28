@@ -76,7 +76,7 @@ class PressureFrame(BaseFrame):
         tk.Label(control_col, text="K_i").grid(row=row_num, column=0)
         self._pressure_monitor_params["pi_ki"] = tk.DoubleVar(value=0.005)
         ttk.Spinbox(control_col, 
-                    textvariable=self._pressure_monitor_params["pi_kp"],
+                    textvariable=self._pressure_monitor_params["pi_ki"],
                     from_=0,
                     to=1,
                     increment=0.001).grid(row=row_num,column=1)
