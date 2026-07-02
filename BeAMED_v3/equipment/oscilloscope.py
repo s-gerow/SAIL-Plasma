@@ -37,6 +37,7 @@ class SiglentSDS1204XE(VisaEquipment):
             Resource identification string used by VISA inferfaces to connect and communication with the device, unique to each individual instrument, by default "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR".
         """
         super().__init__(name, manager, resource_id, abort_event=abort_event)
+        self.triggered = False
 
     def configure(self, channel: str = "C1", vdiv: float = 1.0, tdiv: float=1e-3, trigger_level:float=0.5, trigger_slope:Literal["POS", "NEG", "WINDOW"] ="POS"):
         """
@@ -77,15 +78,21 @@ class SiglentSDS1204XE(VisaEquipment):
         """
         Set the trigger mode on a pre-specifed source, see configure(). Single mode will trigger on the next valid signal. 
         """
+        if self.triggered:
+            self.triggered = False
         self.write("TRMD SINGLE")
-        threading.Thread(target=self._wait_for_trigger,
+        t = threading.Thread(target=self._wait_for_trigger,
                          daemon=True,
-                         name="osc_trigger").start()
+                         name="osc_trigger")
+        t.start()
+        t.join()
+        if self.triggered:
+            waveform = self.capture()
+            return waveform
 
 
     def _wait_for_trigger(self, poll_interval: float = 0.05,
                          stop_event:threading.Event|None=None, abort_event=None) -> bool:
-        
         """
         Blocks until scope triggers, stop_event fires, or abort_event fires.
         Returns True if triggered, False if stopped/aborted.
@@ -94,12 +101,15 @@ class SiglentSDS1204XE(VisaEquipment):
         abort_event = self._abort
         while True:
             if abort_event and abort_event.is_set():
-                return False
+                self.triggered =  False
+                return
             if stop_event and stop_event.is_set():
-                return False
+                self.triggered = False
+                return
             status = self.query("SAST?")
             if "Stop" in status:
-                return True
+                self.triggered = True
+                return
             time.sleep(poll_interval)
 
     def capture(self, channel: str = "C1") -> Waveform:
@@ -130,7 +140,7 @@ class SiglentSDS1204XE(VisaEquipment):
         return Waveform(
             voltage=voltage,
             time=time_axis,
-            dy=float(np.max(voltage) - np.min(voltage)),
+            dy=self.read_pkpk(), #float(np.max(voltage) - np.min(voltage)),
             t_discharge=time.perf_counter()
             )
 
@@ -139,7 +149,6 @@ class SiglentSDS1204XE(VisaEquipment):
 
     def read_pkpk(self) -> float:
         return self.query("C1:PARAMETER_VALUE? PKPK")
-
 
     def getStatus(self) -> dict:
         base = super().get_status()

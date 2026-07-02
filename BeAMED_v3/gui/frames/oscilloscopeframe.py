@@ -73,6 +73,9 @@ class OscilloscopeFrame(BaseFrame):
             else:
                 pkpk = float(result.data['result'])
             self.pkpk.set(pkpk)
+        elif result.action == "osc_arm_trigger":
+            self._plot_waveform(result.data["result"])
+            self.pkpk.set(result.data["result"].dy)
         else:
             self.logger.warning(f"Unhandled osc result: {result.action}")
 
