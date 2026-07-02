@@ -59,25 +59,41 @@ class NIDAQEquipment(Equipment):
                                             )
             self.tasks["ao"] = ao
 
-            do_valves = nidaqmx.Task()
-            do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line1", name_to_assign_to_lines="Vent")
-            do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line0", name_to_assign_to_lines="MainPump")
-            do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line2", name_to_assign_to_lines="SmallPump")
-            self.tasks["do_valves"] = do_valves
-
-            # gonna have to come back and compress these into a single task smh
-            do_feedthrough = nidaqmx.Task()
-            do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line2", name_to_assign_to_lines="PUL")
-            do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line1", name_to_assign_to_lines="DIR")
-            self.tasks["do_feedthrough"] = do_feedthrough
+            self._connect_valves()
 
             self._connected = True
             self.logger.info("NIDAQ tasks configured")
 
+    def _connect_valves(self):
+        do_valves = nidaqmx.Task()
+        do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line1", name_to_assign_to_lines="Vent")
+        do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line0", name_to_assign_to_lines="MainPump")
+        do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line2", name_to_assign_to_lines="SmallPump")
+        self.tasks["do_valves"] = do_valves
+
+    def _connect_feedthrough(self):
+        do_feedthrough = nidaqmx.Task()
+        do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line3", name_to_assign_to_lines="PUL")
+        do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line2", name_to_assign_to_lines="DIR")
+        self.tasks["do_feedthrough"] = do_feedthrough
+
+    def _disconnect_valves(self):
+        if self.tasks["do_valves"]:
+            self.tasks["do_valves"].close()
+            self.tasks.pop("do_valves")
+
+    def _disconnect_feedthrough(self):
+        if self.tasks["do_feedthrough"]:
+            self.tasks["do_feedthrough"].close()
+            self.tasks.pop("do_feedthrough")
+
     def disconnect(self):
         self.pressure.stop()
         self.mfc.stop_pi()
-        self.valves.close_all()
+        try:
+            self.valves.close_all()
+        except KeyError:
+            pass
         for name, task in self.tasks.items():
             try:
                 task.close()
@@ -123,6 +139,11 @@ class NIDAQEquipment(Equipment):
         self.mfc.stop_pi()
 
     # Feedthrough Subsystem Wrappers
+    def step_feedthrough_cm(self, dir_: bool, cm: float, stop_event: threading.Event):
+        self.feedthrough._step_for_cm(dir_, cm, stop_event)
+
+    def step_feedthrough(self, dir_: bool):
+        self.feedthrough._step(dir_)
 
     # Valve Subsystem Wrappers
     def open_valve(self, valve: int):
@@ -325,8 +346,6 @@ class subsystemMFC:
             readouts = self.samples_readback[-1][1] if self.samples_readback else 0.0
         return setpoints, readouts
 
-
-
 class subsystemValve:
     def __init__(self, parent:NIDAQEquipment):
         self._parent = parent
@@ -340,8 +359,9 @@ class subsystemValve:
         self._set(valve, False)
 
     def close_all(self):
-        for i in range(3):
-            self._set(i, False)
+        if self._parent.tasks["do_valves"]:
+            for i in range(3):
+                self._set(i, False)
     
     def _set(self, valve:int, state: bool):
         if not 0 <= valve < 3:
@@ -361,6 +381,39 @@ class subsystemFeedthrough:
 
     def __init__(self, parent:NIDAQEquipment):
         self._parent = parent
+
+    def _step(self, dir_: bool = True):
+        dir_state = dir_
+        with self._parent._task_lock:
+            self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
+        time.sleep(0.00005)
+        with self._parent._task_lock:
+            self._parent.tasks['do_feedthrough'].write([True, dir_state], auto_start=True)
+        time.sleep(self.STEP_DELAY)
+        with self._parent._task_lock:
+            self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
+        time.sleep(self.STEP_DELAY)
+
+    def _step_for_cm(self, dir_: bool = True, cm: float = 1.0, stop_event: threading.Event | None = None):
+        direction_str = "Up" if dir_ else "Down"
+        self._parent.logger.debug(f"Stepping feedthrough {cm} cm in direction {direction_str}")
+        steps = int(cm*self.STEPS_PER_CM)
+        dir_state = dir_
+        with self._parent._task_lock:
+            self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
+        time.sleep(0.00005)
+        for _ in range(0, steps,1):
+            with self._parent._task_lock:
+                self._parent.tasks["do_feedthrough"].write([True, dir_state], auto_start=True)
+            time.sleep(self.STEP_DELAY)
+            with self._parent._task_lock:
+                self._parent.tasks["do_feedthrough"].write([False, dir_state], auto_start=True)
+            time.sleep(self.STEP_DELAY)
+            if self._parent._abort_event.is_set():
+                return
+            if stop_event.is_set():
+                self._parent.logger.warning("Stop Event detected. Stopping feedthrough.")
+                return
 
     def get_status(self):
         return False

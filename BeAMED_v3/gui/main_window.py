@@ -56,6 +56,7 @@ class BeAMEDWindow(tk.Tk):
         self.main_frame.columnconfigure(2, weight=1)
         self.main_frame.columnconfigure(3, weight=1)
         self.main_frame.columnconfigure(4, weight=1)
+        #self.main_frame.columnconfigure(5, weight=1)
         
         self.exp_controller = ExperimentControlFrame(self.main_frame, self.controller)
 
@@ -101,7 +102,9 @@ class BeAMEDWindow(tk.Tk):
         self.pwr_frame = PowerFrame(self.main_frame, self.controller, self.controller.get("pwr").getName())
         self.pwr_frame.grid(row=1, column=1, sticky="nsew")
 
-        tk.Frame(self.main_frame, bg="#47B3FC").grid(row=1, column=2, sticky="nsew")
+        self.feedthrough_frame = self.pressure_frame.feedthrough_frame
+        self.feedthrough_frame.grid(row=1, column=2, sticky="nsew")
+        
         self.exp_controller.output_frame.grid(row=1, column=3, columnspan=2, sticky="nsew")
 
         self._frame_map: dict[str, BaseFrame] = {

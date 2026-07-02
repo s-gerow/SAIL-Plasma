@@ -5,9 +5,10 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 import logging
 import time
 from collections import deque
+import threading
 
 from datatypes import ActionResult, ConnectResult
-from gui.frames.styles import HeaderLabel, IND_ON, ValueDisplay
+from gui.frames.styles import HeaderLabel, IND_ON, IND_ERROR, ValueDisplay, IndicatorButton
 from gui.frames.baseframe import BaseFrame
 from threadcontroller import Controller
 
@@ -29,11 +30,13 @@ class PressureFrame(BaseFrame):
 
         self._pressure_monitor_params: dict[str, tk.Variable] = {}
         self._running = False
+        self._stepping = False
         self._build()
 
     def _build(self):
         super()._build()
         self._build_controls()
+        self._build_feedthrough_panel()
         self._build_readout()
         self._build_plot()
 
@@ -104,13 +107,17 @@ class PressureFrame(BaseFrame):
         # Valve Control Panel
         HeaderLabel(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Vent Chamber", command=lambda:self._control_valve(1)).grid(row=row_num, column=0, columnspan=2)
+        self.btn_vent = tk.Button(control_col, text="Vent Chamber", command=lambda:self._control_valve(1))
+        self.btn_vent.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Pump Chamber (main)", command=lambda:self._control_valve(0)).grid(row=row_num, column=0, columnspan=2)
+        self.btn_pump_main = tk.Button(control_col, text="Pump Chamber (main)", command=lambda:self._control_valve(0))
+        self.btn_pump_main.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Pump Chamber (secondary)", command=lambda: self._control_valve(2)).grid(row=row_num, column=0, columnspan=2)
+        self.btn_pump_sec = tk.Button(control_col, text="Pump Chamber (secondary)", command=lambda: self._control_valve(2))
+        self.btn_pump_sec.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Close Valves", command=self._close_valves).grid(row=row_num, column=0, columnspan=2)
+        self.btn_valve_close = tk.Button(control_col, text="Close Valves", command=self._close_valves)
+        self.btn_valve_close.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         
     def _build_readout(self):
@@ -123,7 +130,42 @@ class PressureFrame(BaseFrame):
         self._mks_var = tk.StringVar(value = "---")
         ValueDisplay(row, "MKS", unit="Torr", textvariable=self._mks_var).pack(side="left")
 
+    def _build_feedthrough_panel(self):
+        self.feedthrough_frame = tk.LabelFrame(self._parent, text="Feedthrough")
+        connect_frame = tk.Frame(self.feedthrough_frame)
+        connect_frame.pack(side='top', fill="x")
+        button_frame = tk.Frame(self.feedthrough_frame)
+        button_frame.pack(side="top",fill="both")
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        button_frame.columnconfigure(2, weight=1)
+        button_frame.columnconfigure(3, weight=1)
+        
 
+        self.feedthrough_indicator = IndicatorButton(connect_frame, on_color=IND_ON, off_color=IND_ERROR)
+        self.feedthrough_indicator.pack(side="left")
+        self.feedthrough_btn = tk.Button(connect_frame, text="Activate", command=self._activate_feedthrough)
+        self.feedthrough_btn.pack(side="left")
+        
+        self.feedthrough_direction = tk.BooleanVar(value=True)
+        tk.Label(button_frame, text="Direction (Up: False, Down: True)").grid(row=0, column=0, columnspan=3)
+        ttk.Combobox(button_frame, 
+                   values=[True, False],
+                   textvariable=self.feedthrough_direction
+                   ).grid(row=0, column=3)
+        self.btn_step_feedthrough = tk.Button(button_frame, text="Step", command=self._step_feedthrough)
+        self.btn_step_feedthrough.grid(row=1, column=0)
+        self.feedthrough_steps = tk.DoubleVar(value=1)
+        tk.Spinbox(button_frame,
+                from_ = 0.1,
+                to = 2.5,
+                increment=0.1,
+                textvariable=self.feedthrough_steps).grid(row=1, column=1)
+        self.btn_step_feedthrough_cm = tk.Button(button_frame, text="Step (cm)", command=self._step_feedthrough_cm)
+        self.btn_step_feedthrough_cm.grid(row=1, column=2)
+        self.stop_event = threading.Event()
+        self.btn_stop_feedthrough = tk.Button(button_frame, text="Stop", command = self.stop_event.set)
+        self.btn_stop_feedthrough.grid(row=1,column=3)
 
     def _build_plot(self):
         self.fig = Figure(figsize=(5,3), dpi=100)
@@ -181,6 +223,52 @@ class PressureFrame(BaseFrame):
         self._line_mfc_r.set_data([],[])
         self._line_mfc_s.set_data([],[])
         self.canvas.draw()
+
+    def _disable_vent_buttons(self):
+        self.btn_vent.config(state="disabled")
+        self.btn_valve_close.config(state="disabled")
+        self.btn_pump_main.config(state="disabled")
+        self.btn_pump_sec.config(state="disabled")
+
+
+    def _enable_vent_buttons(self):
+        self.btn_vent.config(state="active")
+        self.btn_valve_close.config(state="active")
+        self.btn_pump_main.config(state="active")
+        self.btn_pump_sec.config(state="active")
+
+
+    def _enable_feedthrough_buttons(self):
+        self.btn_step_feedthrough_cm.config(state="active")
+        self.btn_step_feedthrough.config(state="active")
+        
+
+    def _disable_feedthrough_buttons(self):
+        self.btn_step_feedthrough.config(state="disabled")
+        self.btn_step_feedthrough_cm.config(state="disabled")
+        
+        
+    def _activate_feedthrough(self):
+        # diable pump buttons and disconnect pump task
+        # connect feedthrough task, enable feedthrough buttons
+        # switch activate to deactivate, change indicator to greed
+        self._disable_vent_buttons()
+        self._enable_feedthrough_buttons()
+        self.feedthrough_btn.config(text="Deactivate", command=self._deactivate_feedthrough)
+        self._run("nidaq_activate_feedthrough", "_connect_feedthrough")
+        self._run("nidaq_deactivate_vent", "_disconnect_valves")
+        self.feedthrough_indicator.set(True)
+
+    def _deactivate_feedthrough(self):
+        # disable feedthrough buttons, disconnect feedthrough task
+        # enable pump buttons, disconnect pump task
+        # switch deactivate to activate, change indicator to red
+        self._enable_vent_buttons()
+        self._disable_feedthrough_buttons()
+        self.feedthrough_btn.config(text="Activate", command=self._activate_feedthrough)
+        self._run("nidaq_deactivate_feedthrough", "_disconnect_feedthrough")
+        self._run("nidaq_activate_vent", "_connect_valves")
+        self.feedthrough_indicator.set(False)
 
     def _control_valve(self, valve: int):
         self.controller.run(f"nidaq_open_valve_{valve}", self.equipment, "open_valve", valve=valve)
@@ -254,3 +342,26 @@ class PressureFrame(BaseFrame):
             self.ax.set_ylim(mn-margin, mx+margin)
 
         self.canvas.draw()
+
+    def _step_feedthrough(self):
+        if self._stepping:
+            self.logger.warning("Feedthrough already running")
+            return
+        self._run("nidaq_step_feedthrough", "step_feedthrough", dir_ = self.feedthrough_direction.get())
+
+    def _step_feedthrough_cm(self):
+        if self._stepping:
+            self.logger.warning("Feedthrough already running")
+            return
+        self.logger.debug(f"{self.feedthrough_direction.get()}")
+        self.stop_event.clear()
+        self._run("nidaq_step_feedthrough_cm", "step_feedthrough_cm", dir_ = self.feedthrough_direction.get(), cm = self.feedthrough_steps.get(), stop_event = self.stop_event)
+
+    def handle_result(self, result: ActionResult):
+        if not result.success:
+            self.logger.error(f"nidaq action failed: {result.error}")
+            return
+        if result.action == "nidaq_step_feedthrough_cm":
+            self._stepping = False
+        else:
+            self.logger.warning(f"Unhandled nidaq result: {result.action}")

@@ -14,7 +14,7 @@ class BaseFrame(tk.LabelFrame):
         self.controller = controller
         self.logger = logging.getLogger("BeAMED.gui."+equipment_name)
         self.equipment = equipment_name
-
+        self._parent = parent
         if _build:
             self._build()
 
