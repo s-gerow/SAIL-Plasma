@@ -1,6 +1,7 @@
 import sys
 import time
 from typing import Literal
+import threading
 
 import numpy as np
 import pyvisa
@@ -22,7 +23,7 @@ class SiglentSDS1204XE(VisaEquipment):
     resource_id : _type_, optional
         Resource identification string used by VISA inferfaces to connect and communication with the device, unique to each individual instrument, by default "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR".
     """
-    def __init__(self,  manager: pyvisa.ResourceManager, name:str = "oscilloscope", resource_id:str = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR"):
+    def __init__(self,  manager: pyvisa.ResourceManager, name:str = "oscilloscope", resource_id:str = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR", abort_event: threading.Event | None = None):
         """
         Initialize and return SiglentSDS1204XE object using default resource identification string
 
@@ -35,7 +36,7 @@ class SiglentSDS1204XE(VisaEquipment):
         resource_id : _type_, optional
             Resource identification string used by VISA inferfaces to connect and communication with the device, unique to each individual instrument, by default "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR".
         """
-        super().__init__(name, manager, resource_id)
+        super().__init__(name, manager, resource_id, abort_event=abort_event)
 
     def configure(self, channel: str = "C1", vdiv: float = 1.0, tdiv: float=1e-3, trigger_level:float=0.5, trigger_slope:Literal["POS", "NEG", "WINDOW"] ="POS"):
         """
@@ -62,25 +63,35 @@ class SiglentSDS1204XE(VisaEquipment):
         # Turn of character headers. Changes command responses from TIME_DIV 1e-3S to 1e-3
         # This can also be set to TDIV 1e-3 but we dont want any characters in these responses, just numbers.
         self.write("CHDR OFF")
+        self.write(f"{channel}:ATTN {1}")
+        self.write(f"{channel}:OFST {0}")
         self.write(f"{channel}:VDIV {vdiv}")
         self.write(f"TDIV {tdiv}")
-        self.write(f"{channel}:TRLV {trigger_level}")
+        self.write(f"HPOS {0}")
+        self.write(f"TRMD NORM")
         self.write(f"{channel}:TRSL {trigger_slope}")
+        self.write(f"TRSE EDGE,SR,{channel},HT,TI,HV,{1E-7}")
+        self.write(f"{channel}:TRLV {trigger_level}")
 
     def arm_trigger(self):
         """
         Set the trigger mode on a pre-specifed source, see configure(). Single mode will trigger on the next valid signal. 
         """
         self.write("TRMD SINGLE")
+        threading.Thread(target=self._wait_for_trigger,
+                         daemon=True,
+                         name="osc_trigger").start()
 
-    def wait_for_trigger(self, poll_interval: float = 0.05,
-                         stop_event=None, abort_event=None) -> bool:
+
+    def _wait_for_trigger(self, poll_interval: float = 0.05,
+                         stop_event:threading.Event|None=None, abort_event=None) -> bool:
         
         """
         Blocks until scope triggers, stop_event fires, or abort_event fires.
         Returns True if triggered, False if stopped/aborted.
         This runs on its own thread — never call from GUI thread.
         """
+        abort_event = self._abort
         while True:
             if abort_event and abort_event.is_set():
                 return False
@@ -125,6 +136,10 @@ class SiglentSDS1204XE(VisaEquipment):
 
     def stop(self):
         self.write("STOP")
+
+    def read_pkpk(self) -> float:
+        return self.query("C1:PARAMETER_VALUE? PKPK")
+
 
     def getStatus(self) -> dict:
         base = super().get_status()

@@ -12,13 +12,16 @@ from loggingconfig import init_logging
 def main():
     init_logging(log_dir="logs", level="INFO")
 
-    rm = pyvisa.ResourceManager()
-    oscope = SiglentSDS1204XE(rm, name="osc")
-    nidaq = NIDAQEquipment()
-    dmm = KeithleyDMM6500(rm)
-    pwr = Keithley2260B_800_1(rm)
-
     controller = Controller()
+
+    abort_event = controller.event_abortAll
+    rm = pyvisa.ResourceManager()
+    oscope = SiglentSDS1204XE(rm, name="osc",abort_event=abort_event)
+    nidaq = NIDAQEquipment(abort_event=abort_event)
+    dmm = KeithleyDMM6500(rm, abort_event=abort_event)
+    pwr = Keithley2260B_800_1(rm,abort_event=abort_event)
+
+
     controller.register(oscope.getName(), oscope)
     controller.register(nidaq.getName(), nidaq)
     controller.register(dmm.getName(), dmm)

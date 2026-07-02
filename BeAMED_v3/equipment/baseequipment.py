@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import logging
+import threading
 
 class Equipment(ABC):
     """
@@ -15,7 +16,7 @@ class Equipment(ABC):
     NotImplementedError
         Methods not implemented in this class raise a NotImplementedError if called via Equipment.method()
     """
-    def __init__(self, name: str):
+    def __init__(self, name: str, abort_event: threading.Event):
         """
         Initialize and return equipment object
 
@@ -28,6 +29,7 @@ class Equipment(ABC):
         self.standalone = False
         self.logger = logging.getLogger(f"BeAMED.{name.lower().replace(' ','_')}")
         self._connected: bool
+        self._abort = abort_event
 
     
     @abstractmethod

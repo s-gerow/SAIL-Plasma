@@ -8,8 +8,8 @@ from nidaqmx.constants import TerminalConfiguration, AcquisitionType
 from equipment.baseequipment import Equipment
 
 class NIDAQEquipment(Equipment):
-    def __init__(self, name: str = "nidaq", device_id="NI_DAQ", kp: float = 1.0, ki: float = 0.1):
-        super().__init__(name)
+    def __init__(self, name: str = "nidaq", device_id="NI_DAQ", kp: float = 1.0, ki: float = 0.1, abort_event: threading.Event | None = None):
+        super().__init__(name, abort_event)
         self.logger = logging.getLogger("BeAMED.nidaq")
         self.device_id = device_id
         self._task_lock = threading.Lock()
@@ -43,16 +43,13 @@ class NIDAQEquipment(Equipment):
                                                     max_val=10,
                                                     terminal_config=TerminalConfiguration.DIFF
                                                     )
-            self.tasks["ai_continuous"] = ai_cont
-
-            ai_poll = nidaqmx.Task()
-            ai_poll.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai3",
+            ai_cont.ai_channels.add_ai_voltage_chan(f"{self.device_id}/ai3",
                                                     name_to_assign_to_channel="MFC_flow",
                                                     min_val=0,
                                                     max_val=5,
                                                     terminal_config=TerminalConfiguration.DIFF
                                                     )
-            self.tasks["ai_poll"] = ai_poll
+            self.tasks["ai_continuous"] = ai_cont
 
             ao = nidaqmx.Task()
             ao.ao_channels.add_ao_voltage_chan(f"{self.device_id}/ao1",
@@ -68,6 +65,7 @@ class NIDAQEquipment(Equipment):
             do_valves.do_channels.add_do_chan(f"{self.device_id}/port0/line2", name_to_assign_to_lines="SmallPump")
             self.tasks["do_valves"] = do_valves
 
+            # gonna have to come back and compress these into a single task smh
             do_feedthrough = nidaqmx.Task()
             do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line2", name_to_assign_to_lines="PUL")
             do_feedthrough.do_channels.add_do_chan(f"{self.device_id}/port1/line1", name_to_assign_to_lines="DIR")
@@ -112,6 +110,17 @@ class NIDAQEquipment(Equipment):
         self.pressure.clear_buffer()
 
     # MFC Subsystem Wrappers
+    def set_flow(self, setpoint_volts: float):
+        self.mfc.set_flow(setpoint_volts)
+
+    def set_PI(self, kp:float, ki:float,pressure_torr:float):
+        self.mfc.set_PI(kp, ki, pressure_torr)
+
+    def start_PI(self):
+        self.mfc.start_pi()
+
+    def stop_PI(self):
+        self.mfc.stop_pi()
 
     # Feedthrough Subsystem Wrappers
 
@@ -136,6 +145,8 @@ class subsystemPressure:
 
         self.samples_kjl: list[tuple[float, float]] = [] #(t, value)
         self.samples_mks: list[tuple[float, float]] = []
+        self.samples_mfc_set: list[tuple[float, float]] = []
+        self.samples_mfc_read: list[tuple[float, float]] = []
 
     def start(self, sample_rate: float = 1000.0):
         if self._running:
@@ -163,6 +174,7 @@ class subsystemPressure:
     def _acquire(self):
         task = self._parent.tasks["ai_continuous"]
         task.start()
+        t_last = time.perf_counter()
         while self._running:
             if self._parent._abort_event.is_set():
                 break
@@ -172,9 +184,12 @@ class subsystemPressure:
                     timeout=1
                 )
                 t=time.perf_counter()
+                dt = t- t_last
+                t_last = t
                 kjl = 10**(np.array(data[0])-5)
                 mks = (np.array(data[1])/10)*(self.pressure_max-self.pressure_min)+self.pressure_min
-                data = (kjl, mks)
+                mfc = self._parent.mfc.volts2sccm(np.array(data[2]))
+                data = (kjl, mks, mfc)
                 with self._lock:
                     self.samples_kjl.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[0])]
@@ -182,9 +197,13 @@ class subsystemPressure:
                     self.samples_mks.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[1])]
                     )
+                    self._parent.mfc.samples_readback.extend(
+                        [(t+i/1000, v) for i, v in enumerate(data[2])]
+                    )
                 if self._parent.mfc._running:
-                    mfc_readback = self._parent.mfc.read_flow()
-                    output = self._parent.mfc.PI(self)
+                    output = self._parent.mfc.PI(mks[-1],dt)
+                    # self.logger.debug(f"calculated set point: {output}")
+                    self._parent.mfc.set_flow(output)
                 
             except nidaqmx.errors.DaqError as e:
                 self.logger.exception("Error reading pressure")
@@ -204,6 +223,8 @@ class subsystemPressure:
             self.samples_mks.clear()
 
 class subsystemMFC:
+    VOLUME = 45.30695
+
     def __init__(self, parent:NIDAQEquipment, kp: float, ki: float, v_per_sccm:float = 0.05):
         self._parent = parent
         self.logger = logging.getLogger("BeAMED.nidaq.mfc")
@@ -220,73 +241,91 @@ class subsystemMFC:
         self._settled_since: float | None = None
         self._tolerance = 0.1
         self._settle_time = 5.0
+        self._setpoint = 1.0
 
         self.samples_readback: list[tuple[float, float]] = []
         self.samples_setpoint: list[tuple[float, float]] = []
         self._lock = threading.Lock()
 
-    def PI(self, setpoint_torr: float, prev_val: float, dt:float):
-        VOLUME = 45.30695
+    def PI(self, prev_val: float, dt:float):
         with self._lock:
             prev_err = self._error
             integral = self._integral
             kp = self.kp
             ki = self.ki
             kd = self.kd
+            setpoint_torr = self._setpoint
         error = setpoint_torr - prev_val
         integral += error*dt
         derivative = (error - prev_err) / dt
         control = (kp * error) + (ki * integral) + (kd * derivative)
-        control_mod = (control*VOLUME)*(1.333224)*(1/0.0168875)*(5/100) #V
+        control_mod = (control*self.VOLUME)*(1.333224)*(1/0.0168875)*(5/100) #V
         control_clamp = max(0.0, min((5.0, control_mod)))
         with self._lock:
             self._error = error
             self._integral = integral
         return control_clamp
 
-    def set_PI(self, kp: float, ki: float):
+    def set_PI(self, kp: float, ki: float, setpoint_torr: float):
         with self._lock:
             self.kp = kp
             self.ki = ki
+            self._setpoint = setpoint_torr
+        self.logger.info(f"Pressure target set to {setpoint_torr:.3f}")
 
     def get_PI(self) -> tuple[float, float]:
         return (self.kp, self.ki)
     
-    def set_flow(self, sccm: float):
-        volts = sccm*self.v_per_sccm
+    def set_flow(self, volts: float):
         with self._parent._task_lock:
             self._parent.tasks["ao"].write(volts)
+        sccm = volts/self.v_per_sccm
         if self._running:
             t=time.perf_counter()
             with self._lock:
                 self.samples_setpoint.append((t,sccm))
-        self.logger.info(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
+        self.logger.debug(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
 
-    def read_flow(self) -> float:
-        with self._parent._task_lock:
-            volts = self._parent.tasks["ai_poll"].read()
-        sccm = volts /self.v_per_sccm
-        if self._pi_running:
-            t = time.perf_counter()
-            with self._lock:
-                self.samples_readback.append((t,sccm))
-        return sccm
+    # def read_flow(self) -> float:
+    #     with self._parent._task_lock:
+    #         volts = self._parent.tasks["ai_poll"].read()
+    #     sccm = volts /self.v_per_sccm
+    #     if self._running:
+    #         t = time.perf_counter()
+    #         with self._lock:
+    #             self.samples_readback.append((t,sccm))
+    #     return sccm
     
-    def start_pi(self, target_sccm:float, settled_event: threading.Event,
+    def start_pi(self, settled_event: threading.Event | None = None,
                  tolerance: float = 1.0, settle_time: float=5.0):
         if self._running:
             self.logger.warning("PI control loop already runnning")
             return
         self._running = True
         self._integral = 0.0
-        self.logger.info(f"PI control loop started with target: {target_sccm}")
+        self.logger.info(f"PI control loop started with target: {self._setpoint} Torr")
 
     def stop_pi(self):
+        if not self._running:
+            return
         self._running = False
         self._integral = 0.0
+        self._setpoint = 0.0
         self._settled_since = None
         self.set_flow(0)
         self.logger.info(f"PI control loop stopped")
+
+    def volts2sccm(self, volts: float) -> float:
+        return volts /self.v_per_sccm
+    
+    @property
+    def latest(self) -> tuple[float, float]:
+        with self._lock:
+            setpoints = self.samples_setpoint[-1][1] if self.samples_setpoint else 0.0
+            readouts = self.samples_readback[-1][1] if self.samples_readback else 0.0
+        return setpoints, readouts
+
+
 
 class subsystemValve:
     def __init__(self, parent:NIDAQEquipment):

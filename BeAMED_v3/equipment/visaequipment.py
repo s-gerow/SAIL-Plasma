@@ -1,4 +1,5 @@
 import pyvisa
+import threading
 
 from equipment.baseequipment import Equipment
 
@@ -8,8 +9,8 @@ class VisaEquipment(Equipment):
     base class for all VISA formate instruments, i.e. Kiethley power supplies, digital multimeters, etc.
     Handles connection lifecycle and raw communication
     '''
-    def __init__(self, name: str, manager: pyvisa.ResourceManager, resource_id:str):
-        super().__init__(name)
+    def __init__(self, name: str, manager: pyvisa.ResourceManager, resource_id:str, abort_event:threading.Event):
+        super().__init__(name,abort_event)
         self.resourceManager = manager
         self.resourceID = resource_id
         self.resource: pyvisa.Resource | None = None

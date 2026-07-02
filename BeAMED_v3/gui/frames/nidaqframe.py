@@ -24,6 +24,9 @@ class PressureFrame(BaseFrame):
         self._kjl_pressure = deque(maxlen=self.MAX_POINTS)
         self._mks_pressure = deque(maxlen=self.MAX_POINTS)
 
+        self._mfc_setpoint = deque(maxlen=self.MAX_POINTS)
+        self._mfc_readback = deque(maxlen=self.MAX_POINTS)
+
         self._pressure_monitor_params: dict[str, tk.Variable] = {}
         self._running = False
         self._build()
@@ -65,6 +68,14 @@ class PressureFrame(BaseFrame):
         # PI Control Panel
         HeaderLabel(control_col, text="PI Controller").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
+        tk.Label(control_col, text="Setpoint (Torr)").grid(row=row_num, column=0)
+        self._pressure_setpoint = tk.DoubleVar(value = 1.0)
+        ttk.Spinbox(control_col,
+                    textvariable=self._pressure_setpoint,
+                    from_=0.1,
+                    to=10,
+                    increment=0.05).grid(row=row_num, column=1)
+        row_num += 1
         tk.Label(control_col, text="K_p").grid(row=row_num, column=0)
         self._pressure_monitor_params["pi_kp"] = tk.DoubleVar(value=0.1)
         ttk.Spinbox(control_col, 
@@ -81,11 +92,11 @@ class PressureFrame(BaseFrame):
                     to=1,
                     increment=0.001).grid(row=row_num,column=1)
         row_num += 1
-        tk.Button(control_col, text="Configure PI Controller").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Set Pressure",command=self._configure_pi).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Start PI Controller").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Start PI Controller", command=self._start_pi).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(control_col, text="Stop PI Controller").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(control_col, text="Stop PI Controller", command=self._stop_pi).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Button(control_col, text="Clear PI Series").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
@@ -117,19 +128,35 @@ class PressureFrame(BaseFrame):
     def _build_plot(self):
         self.fig = Figure(figsize=(5,3), dpi=100)
         self.ax = self.fig.add_subplot(111)
+        self.ax2 = self.ax.twinx()
         self._style_axes()
 
         self._line_kjl, = self.ax.plot([], [], linewidth=0.8, label="KJL")
         self._line_mks, = self.ax.plot([], [], linewidth=0.8, label="MKS")
+        self._line_mfc_s, = self.ax2.plot([], [], linewidth=0.8, label="MFC Set")
+        self._line_mfc_r, = self.ax2.plot([], [], linewidth=0.8, label="MFC Read")
 
         self.ax.legend()
+        self.ax2.legend()
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.frame)
         NavigationToolbar2Tk(self.canvas, self).pack(fill="x")
         self.canvas.get_tk_widget().pack(side="bottom",fill="both", expand=True)
 
     def _style_axes(self):
-        self.logger.warning(f"{type(self).__name__} does not implement _style_axes() yet")
+        self.ax.set_ylabel('Pressure (Torr)')
+        self.ax.set_xlabel('Time (s)')
+
+
+        self.ax2.set_ylabel('Flow (sccm)')
+        self.ax2.set_ylim((0,110))
+
+
+        self.ax2.legend(loc='upper center', bbox_to_anchor=(0.5,1.05), ncol=2, fancybox=True, shadow=True)
+        self.ax.legend(loc='upper center', bbox_to_anchor=(0.5,0.98), ncol=2, fancybox=True, shadow=True)
+        self.ax.spines['top'].set_visible(False)
+        self.ax2.spines['top'].set_visible(False)
+        self.fig.tight_layout()
 
     def _start(self):
         self.controller.run("nidaq_start_pressure", self.equipment, "start_pressure_acquisition")
@@ -146,9 +173,13 @@ class PressureFrame(BaseFrame):
         self._times.clear()
         self._kjl_pressure.clear()
         self._mks_pressure.clear()
+        self._mfc_readback.clear()
+        self._mfc_setpoint.clear()
         self._t_start = time.perf_counter()
         self._line_kjl.set_data([],[])
         self._line_mks.set_data([],[])
+        self._line_mfc_r.set_data([],[])
+        self._line_mfc_s.set_data([],[])
         self.canvas.draw()
 
     def _control_valve(self, valve: int):
@@ -158,13 +189,17 @@ class PressureFrame(BaseFrame):
         self.controller.run("nidaq_close_valves",self.equipment,"close_valves")
 
     def _configure_pi(self):
-        pass
+        kp = self._pressure_monitor_params['pi_kp'].get()
+        ki = self._pressure_monitor_params['pi_ki'].get()
+        set_point = self._pressure_setpoint.get()
+
+        self.controller.run("nidaq_set_pi", self.equipment, "set_PI", ki=ki, kp=kp,pressure_torr = set_point)
 
     def _start_pi(self):
-        pass
+        self.controller.run("nidaq_start_pi", self.equipment, "start_PI")
 
     def _stop_pi(self):
-        pass
+        self.controller.run("nidaq_stop_pi", self.equipment, "stop_PI")
 
     def _clear_pi(self):
         pass
@@ -176,11 +211,14 @@ class PressureFrame(BaseFrame):
         nidaq = self.controller.get(self.equipment)
         
         kjl, mks = nidaq.pressure.latest
+        setpoint, readpoint = nidaq.mfc.latest
         t = time.perf_counter() - self._t_start
 
         self._times.append(t)
         self._kjl_pressure.append(kjl)
         self._mks_pressure.append(mks)
+        self._mfc_setpoint.append(setpoint)
+        self._mfc_readback.append(readpoint)
 
         self._kjl_var.set(f"{kjl:.4f}")
         self._mks_var.set(f"{mks:.4f}")
@@ -193,12 +231,16 @@ class PressureFrame(BaseFrame):
         times = list(self._times)
         kjl_p = list(self._kjl_pressure)
         mks_p = list(self._mks_pressure)
+        mfc_s = list(self._mfc_setpoint)
+        mfc_r = list(self._mfc_readback)
         
         if not times:
             return
         
         self._line_kjl.set_data(times, kjl_p)
         self._line_mks.set_data(times, mks_p)
+        self._line_mfc_s.set_data(times, mfc_s)
+        self._line_mfc_r.set_data(times, mfc_r)
 
         window = self.WINDOW_S
         t_now = times[-1]

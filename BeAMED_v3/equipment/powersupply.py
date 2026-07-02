@@ -10,8 +10,8 @@ from equipment.visaequipment import VisaEquipment
 from datatypes import PowerSeries
 
 class Keithley2260B_800_1(VisaEquipment):
-    def __init__(self, manager: pyvisa.ResourceManager, name: str = "pwr",  resource_id: str = "ASRL3::INSTR"):
-        super().__init__(name, manager, resource_id)
+    def __init__(self, manager: pyvisa.ResourceManager, name: str = "pwr",  resource_id: str = "ASRL3::INSTR", abort_event:threading.Thread|None=None):
+        super().__init__(name, manager, resource_id, abort_event=abort_event)
         self._enabled = False
         self._output = False
         self._lock = threading.Lock()

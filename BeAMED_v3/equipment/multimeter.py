@@ -11,8 +11,8 @@ from equipment.visaequipment import VisaEquipment
 from datatypes import DMMSeries
 
 class KeithleyDMM6500(VisaEquipment):
-    def __init__(self, manager: pyvisa.ResourceManager, name: str = "dmm", resource_id: str = "USB0::0x05E6::0x6500::04470458::INSTR"):
-        super().__init__(name, manager, resource_id)
+    def __init__(self, manager: pyvisa.ResourceManager, name: str = "dmm", resource_id: str = "USB0::0x05E6::0x6500::04470458::INSTR", abort_event:threading.Thread|None=None):
+        super().__init__(name, manager, resource_id, abort_event=abort_event)
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
@@ -116,11 +116,10 @@ class KeithleyDMM6500(VisaEquipment):
     
     @property
     def latest(self) -> float:
-        with self._lock:
-            if self._mode in ("VOLT:DC"):
-                read = self.series.samples_voltage[-1][1] if self.series.samples_voltage else 0.0
-            elif self._mode in ("CONT"):
-                read = self.series.samples_resistance[-1][1] if self.series.samples_resistance else 0.0
+        if self._mode in ("VOLT:DC"):
+            read = self.series.samples_voltage[-1][1] if self.series.samples_voltage else 0.0
+        elif self._mode in ("CONT"):
+            read = self.series.samples_resistance[-1][1] if self.series.samples_resistance else 0.0
         return read
     
 
