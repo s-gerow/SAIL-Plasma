@@ -6,6 +6,7 @@ import logging
 
 from gui.frames.styles import ValueLabel, HeaderLabel
 from threadcontroller import Controller, ActionResult
+from datatypes import ExperimentParams
 
 
 class ExperimentControlFrame:
@@ -26,7 +27,7 @@ class ExperimentControlFrame:
         return self._output_frame
     
 class ExperimentInputFrame(tk.LabelFrame):
-    def __init__(self, parent, exp_controller):
+    def __init__(self, parent, exp_controller: Controller):
         super().__init__(parent, text="Experiment Input")
         self.exp_controller = exp_controller
         self._input_vars: dict[str, tk.Variable] = {}
@@ -130,7 +131,7 @@ class ExperimentInputFrame(tk.LabelFrame):
         # Control Panel
         HeaderLabel(input_col, text="Control Panel").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(input_col, text="Configure Series").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(input_col, text="Configure Series", command= self._configure_series).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         tk.Button(input_col, text="Start Series").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
@@ -138,6 +139,24 @@ class ExperimentInputFrame(tk.LabelFrame):
         row_num += 1
         tk.Button(input_col, text="Abort Series").grid(row=row_num, column=0, columnspan=2)
         
+    def _configure_series(self):
+        params = ExperimentParams(
+            start_pressure = self._input_vars["pressure_min"].get(),
+            stop_pressure = self._input_vars["pressure_max"].get(),
+            n_discharges = self._input_vars["num_discharges"].get(),
+            gap_cm = self._input_vars["feedthrough_pos"].get(),
+            start_voltage = self._input_vars["pwr_volt_start"].get(),
+            dV = 5,
+            dwell_time = 3,
+            target_pressure = 0.0,
+            gas_species = self._input_vars["gas_species"].get(),
+            cathode_material = self._input_vars["cathode_mat"].get(),
+            anode_material = self._input_vars["anode_mat"].get(),
+            cathode_shape = "Large Plate",
+            anode_shape="Small Plate",
+            notes = ""
+        )
+        self.exp_controller.configure_process(params)
 
         
 

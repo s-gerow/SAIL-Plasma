@@ -1,9 +1,13 @@
+#beamed_v3/threadcontroller.py
+
 import threading
 import queue
 import logging
 from typing import Any
 from equipment.baseequipment import Equipment
 from datatypes import ConnectResult, ActionResult, DisconnectResult
+from hdf5_writer import HDF5Writer
+from process import ExperimentProcess
 
 
 class Controller:
@@ -15,6 +19,8 @@ class Controller:
         self.registry: dict[str, Equipment] = {}
         self.queue: queue.Queue = queue.Queue()
         self.event_abortAll = threading.Event()
+        self.writer = HDF5Writer(self.queue)
+        self.process = ExperimentProcess(self, self.writer)
 
     def register(self, key: str, equipment: Equipment):
         '''
@@ -104,6 +110,17 @@ class Controller:
                 success = False,
                 error = str(e)
             ))
+
+    def configure_process(self, process: ExperimentProcess):
+        self.logger.debug(f"Process Configured. Params: {process}")
+
+    def start_process(self):
+        t = threading.Thread(
+            target=self.process.start,
+            name="ExperimentSeries",
+            daemon=True
+        )
+        t.start()
 
     def shutdown(self):
         self.logger.info("Shutting down. Closing all open threads...")

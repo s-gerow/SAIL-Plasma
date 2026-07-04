@@ -21,7 +21,6 @@ def main():
     dmm = KeithleyDMM6500(rm, abort_event=abort_event)
     pwr = Keithley2260B_800_1(rm,abort_event=abort_event)
 
-
     controller.register(oscope.getName(), oscope)
     controller.register(nidaq.getName(), nidaq)
     controller.register(dmm.getName(), dmm)
@@ -32,4 +31,3 @@ def main():
 
 if __name__=="__main__":
     main()
- 
