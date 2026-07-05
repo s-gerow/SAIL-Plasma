@@ -1,10 +1,13 @@
 #Beamed_v3/process.py
 
+from __future__ import annotations
 import time
 import threading
 import logging
+from typing import TYPE_CHECKING
 
-from threadcontroller import Controller
+if TYPE_CHECKING:
+    from threadcontroller import Controller  # only imported for type hints, not at runtime
 from datatypes import (
     RunData,
     DischargeMeta,
@@ -20,10 +23,10 @@ from datatypes import (
     PowerSeries,
     Waveform
 )
-from hdf5_writer import HDF5Writer
-    
+from npz_writer import NPZWriter    
+
 class ExperimentProcess:
-    def __init__(self, controller: Controller, writer: HDF5Writer):
+    def __init__(self, controller: 'Controller', writer: NPZWriter):
         self.controller = controller
         self.writer = writer
         self.logger = logging.getLogger("BeAMED.experiment")
