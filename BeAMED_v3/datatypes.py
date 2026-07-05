@@ -106,9 +106,9 @@ class ExperimentParams:
     @property
     def pressures(self) -> np.ndarray:
         return np.linspace(
-            self.start_pressure,
-            self.stop_pressure,
-            self.n_discharges,
+            start = self.start_pressure,
+            stop = self.stop_pressure,
+            num = int(self.n_discharges),
             endpoint=True
         )
     

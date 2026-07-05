@@ -46,13 +46,7 @@ class ExperimentProcess:
             self.logger.warning("Experiment already running")
             return
         self._abort.clear()
-        self._thread = threading.Thread(
-            target=self._run,
-            args=(params,),
-            daemon=True,
-            name="experiment_series"
-        )
-        self._thread.start()
+        self._run(params)
         self.logger.info(f"Experimert series started from {params.start_pressure} Torr to {params.stop_pressure} Torr")
 
     def stop(self):
@@ -61,7 +55,13 @@ class ExperimentProcess:
 
     def _run(self, params: ExperimentParams):
         try:
-            self._execute(params)
+            self._thread = threading.Thread(
+            target=self._execute,
+            args=(params,),
+            daemon=True,
+            name="experiment_series"
+            )
+            self._thread.start()
         except Exception as e:
             self.logger.exception("Experiment Failed")
             self.controller.queue.put(
@@ -74,46 +74,20 @@ class ExperimentProcess:
         scope = self.controller.get("osc")
         dmm = self.controller.get("dmm")
 
-        ## Experiment series ordering
-        # read params:
-        # pressure array = params.pressures()
-        # start first discharge
-        # reset abort-event
-        # reset stop_event
-        # i = 0
-        # set target pressure pressures[i]
-        # open pump valve
-        # wait until P = 0.9
-        # enable PI controller to get to target pressure
-        # when P ~= target pressure for settle time
-        # start dmm in continuity mode
-        # start grounding the electrode
-        # wait until R < x
-        # reverse electrode
-        # set distance cm
-        # when electrode set
-        # configure dmm in voltage mode
-        # set power supply enabled
-        # configure oscope
-        # start new pressure series, dmm series, power series
-        # start voltage increase
-        # check for abort, stop, or trigger
-        # save all series, etc
-        # save to file
-        # i + 1
-        # open vent valve
-        # start back at line 4
-
 
 
         # configure the oscilloscope
-        scope.configure()
+        self.logger.debug("configuring oscilloscope")
+        #scope.configure()
+        self.logger.debug("configuring digital multimeter")
+        #dmm.configure()
+        self.logger.debug("configuring power supply")
+
 
         for i, pressure in enumerate(params.pressures):
             if self._abort.is_set() or self.controller.event_abortAll.is_set():
                 self.logger.warning(f"Aborted before discharge {i+1}")
                 break
-            
             self.logger.info(f"Discharge {i+1}/{params.n_discharges} - target pressure {pressure:.3f} Torr")
             skipped = self._run_discharge(i, pressure, params, nidaq, pwr, scope, dmm)
 
@@ -133,7 +107,9 @@ class ExperimentProcess:
 
     def _run_discharge(self, index, pressure, params, nidaq, pwr, scope, dmm) -> bool:
         # starting at atmosphere
-
-
-        self.controller.run("nidaq_set_pi", nidaq, "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
-        self.controller.run("nidaq_start_pi", nidaq, "start_PI")
+        try:
+                
+            self.controller.run("nidaq_set_pi", nidaq, "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
+            self.controller.run("nidaq_start_pi", nidaq, "start_PI")
+        except Exception as e:
+            self.logger.warning(f"experiment run failed due to exception: {str(e)}")

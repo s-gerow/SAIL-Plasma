@@ -38,6 +38,7 @@ class SiglentSDS1204XE(VisaEquipment):
         """
         super().__init__(name, manager, resource_id, abort_event=abort_event)
         self.triggered = False
+        self.series: Waveform() | None = None
 
     def configure(self, channel: str = "C1", vdiv: float = 1.0, tdiv: float=1e-3, trigger_level:float=0.5, trigger_slope:Literal["POS", "NEG", "WINDOW"] ="POS"):
         """
@@ -137,12 +138,14 @@ class SiglentSDS1204XE(VisaEquipment):
         n = len(voltage)
         time_axis = np.array([(tdiv * 14) - i * time_interval for i in range(n)])
 
-        return Waveform(
+        wave = Waveform(
             voltage=voltage,
             time=time_axis,
             dy=self.read_pkpk(), #float(np.max(voltage) - np.min(voltage)),
             t_discharge=time.perf_counter()
             )
+        self.series = wave
+        return wave
 
     def stop(self):
         self.write("STOP")

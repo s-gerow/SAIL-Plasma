@@ -26,6 +26,18 @@ class ExperimentControlFrame:
     def output_frame(self) -> tk.LabelFrame:
         return self._output_frame
     
+    def start_process(self):
+        self.controller.start_process()
+
+    def stop_process(self):
+        self.controller.stop_process()
+    
+    def configure_process(self, params: ExperimentParams):
+        self.controller.configure_process(params)
+        
+    def _run(self, action: str, method: str, **kwargs):
+        self.controller.run(action, self.equipment, method, **kwargs)
+    
 class ExperimentInputFrame(tk.LabelFrame):
     def __init__(self, parent, exp_controller: Controller):
         super().__init__(parent, text="Experiment Input")
@@ -133,12 +145,19 @@ class ExperimentInputFrame(tk.LabelFrame):
         row_num += 1
         tk.Button(input_col, text="Configure Series", command= self._configure_series).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(input_col, text="Start Series").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(input_col, text="Start Series", command=self._start_series).grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(input_col, text="Pause Series").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(input_col, text="Pause Series", state='disabled').grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        tk.Button(input_col, text="Abort Series").grid(row=row_num, column=0, columnspan=2)
+        tk.Button(input_col, text="Abort Series", command = self._abort_series).grid(row=row_num, column=0, columnspan=2)
         
+    def _start_series(self):
+        self.exp_controller.start_process()
+
+    def _abort_series(self):
+        self.exp_controller.stop_process()
+
+
     def _configure_series(self):
         params = ExperimentParams(
             start_pressure = self._input_vars["pressure_min"].get(),

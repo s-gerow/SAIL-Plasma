@@ -25,7 +25,7 @@ def main():
     controller.register(nidaq.getName(), nidaq)
     controller.register(dmm.getName(), dmm)
     controller.register(pwr.getName(), pwr)
-
+ 
     app = BeAMEDWindow(controller)
     app.mainloop()
 

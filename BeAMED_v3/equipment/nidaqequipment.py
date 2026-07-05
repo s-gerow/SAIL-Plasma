@@ -5,6 +5,7 @@ import numpy as np
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
 
+from datatypes import PressureTimeseries, MFCTimeseries
 from equipment.baseequipment import Equipment
 
 class NIDAQEquipment(Equipment):
@@ -164,10 +165,8 @@ class subsystemPressure:
         self.pressure_min = 0.11 #Torr #MKS Sensor
         self.pressure_max = 10 #Torr #MKS Sensor
 
-        self.samples_kjl: list[tuple[float, float]] = [] #(t, value)
-        self.samples_mks: list[tuple[float, float]] = []
-        self.samples_mfc_set: list[tuple[float, float]] = []
-        self.samples_mfc_read: list[tuple[float, float]] = []
+        
+        self.series = PressureTimeseries()
 
     def start(self, sample_rate: float = 1000.0):
         if self._running:
@@ -212,13 +211,13 @@ class subsystemPressure:
                 mfc = self._parent.mfc.volts2sccm(np.array(data[2]))
                 data = (kjl, mks, mfc)
                 with self._lock:
-                    self.samples_kjl.extend(
+                    self.series.samples_kjl.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[0])]
                     )
-                    self.samples_mks.extend(
+                    self.series.samples_mks.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[1])]
                     )
-                    self._parent.mfc.samples_readback.extend(
+                    self._parent.mfc.series.samples_readback.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[2])]
                     )
                 if self._parent.mfc._running:
@@ -264,8 +263,7 @@ class subsystemMFC:
         self._settle_time = 5.0
         self._setpoint = 1.0
 
-        self.samples_readback: list[tuple[float, float]] = []
-        self.samples_setpoint: list[tuple[float, float]] = []
+        self.series = MFCTimeseries()
         self._lock = threading.Lock()
 
     def PI(self, prev_val: float, dt:float):
@@ -304,7 +302,7 @@ class subsystemMFC:
         if self._running:
             t=time.perf_counter()
             with self._lock:
-                self.samples_setpoint.append((t,sccm))
+                self.series.samples_setpoint.append((t,sccm))
         self.logger.debug(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
 
     # def read_flow(self) -> float:

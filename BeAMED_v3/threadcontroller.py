@@ -3,9 +3,10 @@
 import threading
 import queue
 import logging
+import time
 from typing import Any
 from equipment.baseequipment import Equipment
-from datatypes import ConnectResult, ActionResult, DisconnectResult
+from datatypes import ConnectResult, ActionResult, DisconnectResult, DischargeMeta, RunData, ExperimentParams
 from npz_writer import NPZWriter
 from process import ExperimentProcess
 
@@ -21,6 +22,8 @@ class Controller:
         self.event_abortAll = threading.Event()
         self.writer = NPZWriter(self.queue)
         self.process = ExperimentProcess(self, self.writer)
+        self.current_run: RunData | None = None
+        self.process_params: ExperimentParams | None = None
 
     def register(self, key: str, equipment: Equipment):
         '''
@@ -112,15 +115,69 @@ class Controller:
             ))
 
     def configure_process(self, process: ExperimentProcess):
+        self.process_params = process
         self.logger.debug(f"Process Configured. Params: {process}")
 
-    def start_process(self):
-        t = threading.Thread(
-            target=self.process.start,
-            name="ExperimentSeries",
-            daemon=True
+    def start_run(self, run_id: str, meta: DischargeMeta) -> RunData:
+        if self.current_run is not None:
+            self.logger.warning("start_run called while run active - overwriting")
+
+        run = RunData(
+            meta=meta,
+            t_start = time.perf_counter()
         )
-        t.start()
+        self.current_run = run
+
+        nidaq = self.registry.get('nidaq')
+        if nidaq:
+            nidaq.pressure.series = run.pressure
+            nidaq.mfc.series = run.mfc
+
+        dmm = self.registry.get("dmm")
+        if dmm:
+            dmm.series = None
+
+        psu = self.registry.get("pwr")
+        if psu:
+            psu.series = None
+
+        scope = self.registry.get("osc")
+        if scope:
+            scope.series = None
+
+        completed = self.current_run
+        self.current_run = None
+        self.logger.info(f"Run ended: {completed.meta.index}")
+        return completed
+    
+    def stamp_trigger(self, source: str):
+        if self.current_run is None:
+            self.logger.warning("stamp_trigger called but no run active")
+            return
+        t = time.perf_counter()
+        run = self.current_run
+        for series in (run.pressure, run.mfc, run.dmm. run.power_supply, run.waveform):
+            if series is not None:
+                series.t_trigger = t
+                series.trigger_source = source
+        self.logger.info(f"Trigger stamped: source={source} t={t:.6f}")
+
+
+    def start_process(self):
+        if self.process_params:
+            params = self.process_params
+            t = threading.Thread(
+                target=self.process.start,
+                args = (params,),
+                name="ExperimentSeries",
+                daemon=True
+            )   
+            t.start()
+        else:
+            self.logger.warning("Process cannot be started, not configured.")
+
+    def stop_process(self):
+        self.process.stop()
 
     def shutdown(self):
         self.logger.info("Shutting down. Closing all open threads...")
