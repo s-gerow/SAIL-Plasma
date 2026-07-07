@@ -113,10 +113,16 @@ class ExperimentProcess:
             self.oscope_trigger.clear()
 
             self.logger.info(f"Discharge {i+1}/{params.n_discharges} - target pressure {pressure:.3f} Torr")
-            success, err = self._run_discharge(i, pressure, params, nidaq, pwr, scope, dmm)
+            success, result_str = self._run_discharge(pressure, params, nidaq)
+
+            self._wait_for_thread_close(nidaq, dmm, scope, pwr)
 
             if not success:
-                notes = err
+                notes = result_str
+            else:
+                trigger_source = result_str
+
+
 
 
             self.logger.info("Venting chamber to atmosphere")
@@ -128,7 +134,7 @@ class ExperimentProcess:
             )
         )
 
-    def _run_discharge(self, index, pressure, params: ExperimentParams, nidaq, pwr, scope, dmm) -> tuple[bool, str]:
+    def _run_discharge(self, pressure, params: ExperimentParams, nidaq) -> tuple[bool, str]:
         # starting at atmosphere
         MIN_PRESSURE = 1 # Torr
         try:
@@ -186,12 +192,26 @@ class ExperimentProcess:
             elif self.power_trigger.is_set():
                 trigger_str = "pwr"
             # check to ensure all threads have closed/check all triggers.
-            # 
+            self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
+            self.controller.run("dmm_stop", "dmm", "stop_continuous_measurement")
+            
             
         except Exception as e:
             self.logger.warning(f"experiment run failed due to exception: {str(e)}")
             return False, str(e)
-        return True, "Success"
+        return True, trigger_str
+
+    def _wait_for_thread_close(self, nidaq: NIDAQEquipment, dmm: KeithleyDMM6500, osc: SiglentSDS1204XE, pwr: Keithley2260B_800_1):
+        if nidaq.pressure._running:
+            self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
+        if dmm._running:
+            self.controller.run("dmm_stop", "dmm", "stop_continuous_measurement")
+        if pwr._output:
+            self.controller.run("pwr_stop", "pwr", "stop")
+        if not osc.triggered:
+            self.controller.run("osc_stop", "osc", "stop")
+
+        
 
     def _wait_for_atmosphere(self, nidaq: NIDAQEquipment):
         nidaq.open_valve(1)
