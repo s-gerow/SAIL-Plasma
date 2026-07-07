@@ -235,11 +235,13 @@ class subsystemPressure:
                         case 'falling':
                             if mks[-1] <= target_:
                                 stop_event.set()
-                                self.stop()
+                                self._runnning = False
+                                break
                         case 'rising':
                             if kjl[-1] >= target_:
                                 stop_event.set()
-                                self.stop()
+                                self._running = False
+                                break
                 if self._parent.mfc._running:
                     if self._parent.mfc._settled_event and not self._parent.mfc._settled_event.is_set():
                         if (mks[-1] >= (self._parent.mfc._tolerance-self._parent.mfc._target)) and (mks[-1] <= (self._parent.mfc._tolerance+self._parent.mfc._target)):
@@ -257,6 +259,7 @@ class subsystemPressure:
                 self.logger.exception("Error reading pressure")
                 break
         task.stop()
+        self.logger.info("Pressure acquisition stopped")
 
     @property
     def latest(self) -> tuple[float, float]:
@@ -344,7 +347,7 @@ class subsystemMFC:
     #     return sccm
     
     def start_pi(self, settled_event: threading.Event | None = None,
-                 tolerance: float = 0.25, settle_time: float=5.0):
+                 tolerance: float = 0.25, settle_time: float=50.0):
         if self._running:
             self.logger.warning("PI control loop already runnning")
             return

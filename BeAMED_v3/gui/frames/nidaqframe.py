@@ -363,5 +363,8 @@ class PressureFrame(BaseFrame):
             return
         if result.action == "nidaq_step_feedthrough_cm":
             self._stepping = False
+        if result.action == "nidaq_pressure_read":
+            self._running = True
+            self._poll()
         else:
             self.logger.warning(f"Unhandled nidaq result: {result.action}")

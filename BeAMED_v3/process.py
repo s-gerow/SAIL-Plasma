@@ -143,10 +143,11 @@ class ExperimentProcess:
             # start reading with a target of min pressure, as the pressure drops to equal or less than target, set the event
             self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition", stop_event = self.pressure_min_event, target_=MIN_PRESSURE, target_trigger='falling')
             # wait for the event trigger from pressure thread
-            while not self.pressure_atmosphere_set.is_set():
+            while not self.pressure_min_event.is_set():
                 time.sleep(0.01)
             # start reading again with no trigger
             self.logger.info(f"Chamber reached minimum pressure: {MIN_PRESSURE} Torr")
+            time.sleep(0.5)
             self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition")
             # set PI controller to target pressure with event
             self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
