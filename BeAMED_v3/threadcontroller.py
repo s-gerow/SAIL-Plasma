@@ -7,7 +7,7 @@ import time
 from typing import Any
 from equipment.baseequipment import Equipment
 from datatypes import ConnectResult, ActionResult, DisconnectResult, DischargeMeta, RunData, ExperimentParams
-from npz_writer import NPZWriter
+from hdf5_writer import HDF5Writer
 from process import ExperimentProcess
 
 
@@ -20,7 +20,7 @@ class Controller:
         self.registry: dict[str, Equipment] = {}
         self.queue: queue.Queue = queue.Queue()
         self.event_abortAll = threading.Event()
-        self.writer = NPZWriter(self.queue)
+        self.writer = HDF5Writer(self.queue)
         self.process = ExperimentProcess(self, self.writer)
         self.current_run: RunData | None = None
         self.process_params: ExperimentParams | None = None
