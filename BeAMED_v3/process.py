@@ -5,6 +5,10 @@ import time
 import threading
 import logging
 from typing import TYPE_CHECKING
+from equipment.nidaqequipment import NIDAQEquipment
+from equipment.oscilloscope import SiglentSDS1204XE
+from equipment.multimeter import KeithleyDMM6500
+from equipment.powersupply import Keithley2260B_800_1
 
 if TYPE_CHECKING:
     from threadcontroller import Controller  # only imported for type hints, not at runtime
@@ -35,8 +39,9 @@ class ExperimentProcess:
 
         self.pi_settled_event = threading.Event()
         self.pressure_min_event = threading.Event()
+        self.pressure_atmosphere_set = threading.Event()
         self.feedthrough_ground_event = threading.Event()
-        self.feedtrhough_gap_set_event = threading.Event()
+        self.feedthrough_gap_set_event = threading.Event()
         self.power_trigger = threading.Event()
         self.oscope_trigger = threading.Event()
         
@@ -69,6 +74,16 @@ class ExperimentProcess:
             )
 
     def _execute(self, params: ExperimentParams):
+        # clear events:
+        self.pressure_atmosphere_set.clear()
+        self.feedthrough_ground_event.clear()
+        self.pressure_min_event.clear()
+        self.pi_settled_event.clear()
+        self.feedthrough_gap_set_event.clear()
+        self.feedthrough_ground_event.clear()
+        self.power_trigger.clear()
+        self.oscope_trigger.clear()
+
         nidaq = self.controller.get("nidaq")
         pwr = self.controller.get("pwr")
         scope = self.controller.get("osc")
@@ -83,21 +98,29 @@ class ExperimentProcess:
         #dmm.configure()
         self.logger.debug("configuring power supply")
 
-
         for i, pressure in enumerate(params.pressures):
             if self._abort.is_set() or self.controller.event_abortAll.is_set():
                 self.logger.warning(f"Aborted before discharge {i+1}")
                 break
-            self.logger.info(f"Discharge {i+1}/{params.n_discharges} - target pressure {pressure:.3f} Torr")
-            skipped = self._run_discharge(i, pressure, params, nidaq, pwr, scope, dmm)
 
-            if skipped:
-                continue
+            self.pressure_atmosphere_set.clear()
+            self.feedthrough_ground_event.clear()
+            self.pressure_min_event.clear()
+            self.pi_settled_event.clear()
+            self.feedthrough_gap_set_event.clear()
+            self.feedthrough_ground_event.clear()
+            self.power_trigger.clear()
+            self.oscope_trigger.clear()
+
+            self.logger.info(f"Discharge {i+1}/{params.n_discharges} - target pressure {pressure:.3f} Torr")
+            success, err = self._run_discharge(i, pressure, params, nidaq, pwr, scope, dmm)
+
+            if not success:
+                notes = err
+
 
             self.logger.info("Venting chamber to atmosphere")
-            self._wait_for_atmosphere(nidaq, timeout=300)
-
-        self._finish(nidaq, pwr, dmm)
+            self._wait_for_atmosphere(nidaq) #, timeout=300)
         self.controller.queue.put(
             ExperimentComplete(
                 n_discharges=len(params.pressures),
@@ -105,11 +128,75 @@ class ExperimentProcess:
             )
         )
 
-    def _run_discharge(self, index, pressure, params, nidaq, pwr, scope, dmm) -> bool:
+    def _run_discharge(self, index, pressure, params: ExperimentParams, nidaq, pwr, scope, dmm) -> tuple[bool, str]:
         # starting at atmosphere
+        MIN_PRESSURE = 1 # Torr
         try:
-                
-            self.controller.run("nidaq_set_pi", nidaq, "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
-            self.controller.run("nidaq_start_pi", nidaq, "start_PI")
+            # open pump valve to get to min pressure
+            self.controller.run("nidaq_open_main_pump", 'nidaq', "open_valve", valve=0)
+            # start reading with a target of min pressure, as the pressure drops to equal or less than target, set the event
+            self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition", stop_event = self.pressure_min_event, target_=MIN_PRESSURE, target_trigger='falling')
+            # wait for the event trigger from pressure thread
+            while not self.pressure_atmosphere_set.is_set():
+                time.sleep(0.01)
+            # start reading again with no trigger
+            self.logger.info(f"Chamber reached minimum pressure: {MIN_PRESSURE} Torr")
+            self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition")
+            # set PI controller to target pressure with event
+            self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
+            self.controller.run("nidaq_start_pi", 'nidaq', "start_PI", settled_event = self.pi_settled_event)
+            # wait for settled event to trigger
+            while not self.pi_settled_event:
+                time.sleep(0.01)
+            self.logger.info(f"Chamber pressure stable at {nidaq.pressure.latest[1]} Torr")
+            # set dmm to continuity mode
+            self.controller.run("dmm_set_cont_mode", "dmm", "func_select", func="CONT")
+            # start dmm acquisition with event to trigger when resistance < threshold
+            self.controller.run("dmm_start_cont_meas", "dmm", "start_continuous_measure", trigger_event = self.feedthrough_ground_event, trigger_value = 100)
+            # start feedthrough for with dmm trigger as stop
+            self.controller.run("nidaq_ground_feedthrough", "nidaq", "start_feedthrough", dir_ = True, stop_event = self.feedthrough_ground_event)
+            # wait for dmm trigger, then wait for some time to allow feedthrough to stop
+            while not self.feedthrough_ground_event:
+                time.sleep(0.01)
+            time.sleep(0.5)
+            # start feedthrough set to params distance with set trigger
+            self.controller.run("nidaq_set_feedthrough", "nidaq", "step_feedthrough_cm", dir_ = False, cm = params.gap_cm, stop_event = None)
+            # wait for feedthrough trigger
+            while not self.feedthrough_gap_set_event:
+                time.sleep(0.01)
+            # set dmm in voltage mode
+            self.controller.run("dmm_set_cont_mode", "dmm", "func_select", func="VOLT:DC")
+            # start dmm reading
+            self.controller.run("dmm_start_cont_meas", "dmm", "start_continuous_measure")
+            # arm oscilloscope trigger 
+            self.controller.run("osc_arm_trigger", "osc", "arm_trigger", trigger_event = self.oscope_trigger)
+            # start voltage increase methode with power supply trigger
+            self.controller.run("pwr_voltage_sweep", "pwr", "start_sweep", 
+                                step = params.dV, 
+                                start = params.start_voltage, 
+                                current_limit = 0.5, 
+                                trigger_event = self.power_trigger, 
+                                stop_event = self.oscope_trigger)
+            # wait for power supply or oscope trigger.
+            while not self.oscope_trigger.is_set() and not self.power_trigger.is_set():
+                time.sleep(0.01)
+            # record which event triggers first
+            if self.oscope_trigger.is_set():
+                trigger_str = "osc"
+            elif self.power_trigger.is_set():
+                trigger_str = "pwr"
+            # check to ensure all threads have closed/check all triggers.
+            # 
+            
         except Exception as e:
             self.logger.warning(f"experiment run failed due to exception: {str(e)}")
+            return False, str(e)
+        return True, "Success"
+
+    def _wait_for_atmosphere(self, nidaq: NIDAQEquipment):
+        nidaq.open_valve(1)
+        nidaq.start_pressure_acquisition(stop_event=self.pressure_atmosphere_set, target_=750, target_trigger='rising')
+        while not self.pressure_atmosphere_set.is_set():
+            time.sleep(0.01)
+        self.logger.info("Chamber reached atmospheric pressure")
+        return

@@ -75,7 +75,7 @@ class SiglentSDS1204XE(VisaEquipment):
         self.write(f"TRSE EDGE,SR,{channel},HT,TI,HV,{1E-7}")
         self.write(f"{channel}:TRLV {trigger_level}")
 
-    def arm_trigger(self):
+    def arm_trigger(self, trigger_event: threading.Event | None = None):
         """
         Set the trigger mode on a pre-specifed source, see configure(). Single mode will trigger on the next valid signal. 
         """
@@ -84,7 +84,10 @@ class SiglentSDS1204XE(VisaEquipment):
         self.write("TRMD SINGLE")
         t = threading.Thread(target=self._wait_for_trigger,
                          daemon=True,
-                         name="osc_trigger")
+                         name="osc_trigger",
+                         kwargs={
+                             "trigger_event": trigger_event
+                         })
         t.start()
         t.join()
         if self.triggered:
@@ -93,7 +96,7 @@ class SiglentSDS1204XE(VisaEquipment):
 
 
     def _wait_for_trigger(self, poll_interval: float = 0.05,
-                         stop_event:threading.Event|None=None, abort_event=None) -> bool:
+                         stop_event:threading.Event|None=None, abort_event=None, trigger_event: threading.Event | None = None) -> bool:
         """
         Blocks until scope triggers, stop_event fires, or abort_event fires.
         Returns True if triggered, False if stopped/aborted.
@@ -103,14 +106,16 @@ class SiglentSDS1204XE(VisaEquipment):
         while True:
             if abort_event and abort_event.is_set():
                 self.triggered =  False
-                return
+                return False
             if stop_event and stop_event.is_set():
                 self.triggered = False
-                return
+                return False
             status = self.query("SAST?")
             if "Stop" in status:
                 self.triggered = True
-                return
+                if trigger_event:
+                    trigger_event.set()
+                return True
             time.sleep(poll_interval)
 
     def capture(self, channel: str = "C1") -> Waveform:

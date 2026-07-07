@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
+from typing import Literal
 
 from datatypes import PressureTimeseries, MFCTimeseries
 from equipment.baseequipment import Equipment
@@ -117,8 +118,8 @@ class NIDAQEquipment(Equipment):
 
 
     # Pressure Subsystem Wrappers
-    def start_pressure_acquisition(self):
-        self.pressure.start()
+    def start_pressure_acquisition(self, stop_event: threading.Event | None = None, target_: float | None = None, target_trigger: Literal['rising', 'falling'] | None = None):
+        self.pressure.start(stop_event=stop_event, target_=target_, target_trigger=target_trigger)
 
     def stop_pressure_acquisition(self):
         self.pressure.stop()
@@ -133,18 +134,21 @@ class NIDAQEquipment(Equipment):
     def set_PI(self, kp:float, ki:float,pressure_torr:float):
         self.mfc.set_PI(kp, ki, pressure_torr)
 
-    def start_PI(self):
-        self.mfc.start_pi()
+    def start_PI(self, settled_event: threading.Event | None = None):
+        self.mfc.start_pi(settled_event =settled_event)
 
     def stop_PI(self):
         self.mfc.stop_pi()
 
     # Feedthrough Subsystem Wrappers
-    def step_feedthrough_cm(self, dir_: bool, cm: float, stop_event: threading.Event):
-        self.feedthrough._step_for_cm(dir_, cm, stop_event)
+    def step_feedthrough_cm(self, dir_: bool, cm: float, trigger_event: threading.Event):
+        self.feedthrough._step_for_cm(dir_, cm, trigger_event)
 
     def step_feedthrough(self, dir_: bool):
         self.feedthrough._step(dir_)
+
+    def start_feedthrough(self, dir_: bool, stop_event: threading.Event):
+        self.feedthrough._step_until(dir_ = dir_, stop_event=stop_event)
 
     # Valve Subsystem Wrappers
     def open_valve(self, valve: int):
@@ -168,7 +172,7 @@ class subsystemPressure:
         
         self.series = PressureTimeseries()
 
-    def start(self, sample_rate: float = 1000.0):
+    def start(self, sample_rate: float = 1000.0, stop_event: threading.Event | None = None, target_: float | None = None, target_trigger: Literal['falling', 'rising'] | None = None):
         if self._running:
             self.logger.warning("Pressure acquisition thread already runnning")
             return
@@ -181,6 +185,11 @@ class subsystemPressure:
         self._thread = threading.Thread(target=self._acquire,
                                         name="pressure_acquisition",
                                         daemon=True,
+                                        kwargs={
+                                                'stop_event': stop_event,
+                                                'target_': target_,
+                                                'target_trigger': target_trigger,
+                                                }
                                         )
         self._thread.start()
         self.logger.info(f"Pressure acquisition started at {sample_rate} Hz")
@@ -191,9 +200,10 @@ class subsystemPressure:
             self._thread.join(timeout=2)
         self.logger.info("Pressure acquisition stopped")
     
-    def _acquire(self):
+    def _acquire(self, stop_event: threading.Event | None, target_: float | None, target_trigger: Literal['rising', 'falling']):
         task = self._parent.tasks["ai_continuous"]
         task.start()
+        settle_time_start = None
         t_last = time.perf_counter()
         while self._running:
             if self._parent._abort_event.is_set():
@@ -220,7 +230,25 @@ class subsystemPressure:
                     self._parent.mfc.series.samples_readback.extend(
                         [(t+i/1000, v) for i, v in enumerate(data[2])]
                     )
+                if target_:
+                    match target_trigger:
+                        case 'falling':
+                            if mks[-1] <= target_:
+                                stop_event.set()
+                                self.stop()
+                        case 'rising':
+                            if kjl[-1] >= target_:
+                                stop_event.set()
+                                self.stop()
                 if self._parent.mfc._running:
+                    if self._parent.mfc._settled_event and not self._parent.mfc._settled_event.is_set():
+                        if (mks[-1] >= (self._parent.mfc._tolerance-self._parent.mfc._target)) and (mks[-1] <= (self._parent.mfc._tolerance+self._parent.mfc._target)):
+                            if settle_time_start:
+                                settle_time = time.perf_counter()-settle_time_start
+                                if settle_time >= self._parent.mfc._settle_time:
+                                    self._parent.mfc._settled_event.set()
+                            else:
+                                settle_time_start = time.perf_counter()
                     output = self._parent.mfc.PI(mks[-1],dt)
                     # self.logger.debug(f"calculated set point: {output}")
                     self._parent.mfc.set_flow(output)
@@ -233,14 +261,14 @@ class subsystemPressure:
     @property
     def latest(self) -> tuple[float, float]:
         with self._lock:
-            p_kjl = self.samples_kjl[-1][1] if self.samples_kjl else 0.0
-            p_mks = self.samples_mks[-1][1] if self.samples_mks else 0.0
+            p_kjl = self.series.samples_kjl[-1][1] if self.series.samples_kjl else 0.0
+            p_mks = self.series.samples_mks[-1][1] if self.series.samples_mks else 0.0
         return p_kjl, p_mks
 
     def clear_buffer(self):
         with self._lock:
-            self.samples_kjl.clear()
-            self.samples_mks.clear()
+            self.series.samples_kjl.clear()
+            self.series.samples_mks.clear()
 
 class subsystemMFC:
     VOLUME = 45.30695
@@ -316,10 +344,13 @@ class subsystemMFC:
     #     return sccm
     
     def start_pi(self, settled_event: threading.Event | None = None,
-                 tolerance: float = 1.0, settle_time: float=5.0):
+                 tolerance: float = 0.25, settle_time: float=5.0):
         if self._running:
             self.logger.warning("PI control loop already runnning")
             return
+        self._settled_event = settled_event
+        self._settle_time = settle_time
+        self._tolerance = tolerance
         self._running = True
         self._integral = 0.0
         self.logger.info(f"PI control loop started with target: {self._setpoint} Torr")
@@ -340,8 +371,8 @@ class subsystemMFC:
     @property
     def latest(self) -> tuple[float, float]:
         with self._lock:
-            setpoints = self.samples_setpoint[-1][1] if self.samples_setpoint else 0.0
-            readouts = self.samples_readback[-1][1] if self.samples_readback else 0.0
+            setpoints = self.series.samples_setpoint[-1][1] if self.series.samples_setpoint else 0.0
+            readouts = self.series.samples_readback[-1][1] if self.series.samples_readback else 0.0
         return setpoints, readouts
 
 class subsystemValve:
@@ -392,7 +423,7 @@ class subsystemFeedthrough:
             self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
         time.sleep(self.STEP_DELAY)
 
-    def _step_for_cm(self, dir_: bool = True, cm: float = 1.0, stop_event: threading.Event | None = None):
+    def _step_for_cm(self, dir_: bool = True, cm: float = 1.0, trigger_event: threading.Event | None = None):
         direction_str = "Up" if dir_ else "Down"
         self._parent.logger.debug(f"Stepping feedthrough {cm} cm in direction {direction_str}")
         steps = int(cm*self.STEPS_PER_CM)
@@ -401,6 +432,28 @@ class subsystemFeedthrough:
             self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
         time.sleep(0.00005)
         for _ in range(0, steps,1):
+            with self._parent._task_lock:
+                self._parent.tasks["do_feedthrough"].write([True, dir_state], auto_start=True)
+            time.sleep(self.STEP_DELAY)
+            with self._parent._task_lock:
+                self._parent.tasks["do_feedthrough"].write([False, dir_state], auto_start=True)
+            time.sleep(self.STEP_DELAY)
+            if self._parent._abort_event.is_set():
+                self._parent.logger.warning("Abort Event detected. Stopping feedthrough.")
+                if trigger_event:
+                    trigger_event.set()
+                return
+        if trigger_event:
+            trigger_event.set()
+            
+    def _step_until(self, stop_event: threading.Event, dir_: bool = True):
+        direction_str = "Up" if dir_ else "Down"
+        self._parent.logger.debug(f"Stepping feedthrough in direction {direction_str}")
+        dir_state = dir_
+        with self._parent._task_lock:
+            self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
+        time.sleep(0.00005)
+        while not stop_event.is_set():
             with self._parent._task_lock:
                 self._parent.tasks["do_feedthrough"].write([True, dir_state], auto_start=True)
             time.sleep(self.STEP_DELAY)

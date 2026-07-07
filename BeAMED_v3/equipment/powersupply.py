@@ -45,6 +45,31 @@ class Keithley2260B_800_1(VisaEquipment):
             self.write(f"SOUR:CURR:LEV:IMM:AMPL {current}")
         self.logger.info(f"Current output set to {current:.3f} | Output enabled: {self._output}")
 
+    def start_sweep(self, step: float, start: float, current_limit: float, trigger_event: threading.Event, stop_event: threading.Event):
+        if not self._enabled:
+            self.logger.warning("Power output not enabled, cannot start output")
+            return
+        if self._output:
+            self.logger.warning("Power output already on, cannot start output")
+            return
+        self._output = True
+        with self._lock:
+            self.write("OUTP:STAT ON")
+        self._thread = threading.Thread(target=self._monitor,
+                                        daemon=True,
+                                        name="pwr_sweep",
+                                        kwargs={
+                                            "step": step,
+                                            "start": start,
+                                            "current_limit": current_limit,
+                                            "trigger_event": trigger_event,
+                                            "stop_event": stop_event
+                                        }
+                                        )
+        self._thread.start()
+        self.logger.warning("CAUTION: HIGH VOLTAGE ON")
+        self.logger.info(f"Voltage Sweep started at {start} V")
+
     def start_output(self):
         if not self._enabled:
             self.logger.warning("Power output not enabled, cannot start output")
@@ -87,6 +112,41 @@ class Keithley2260B_800_1(VisaEquipment):
                 break
             except Exception as e:
                 self.logger.exception("PSU monitor error")
+                break
+
+    def _voltage_sweep(self, step: float, start: float, current_limit: float, trigger_event: threading.Event, stop_event: threading.Event):
+        v = start
+        self.set_current(current_limit)
+        self.set_voltage(v)
+        t = time.perf_counter()
+        with self._lock:
+            voltage = float(self.query("MEAS:VOLT?"))
+            current = float(self.query("MEAS:CURR?"))
+        if self.series is not None:
+            self.series.samples_voltage.append((t, voltage))
+            self.series.samples_current.append((t, current))
+        while self._output:
+            try:
+                if not self._connected:
+                    break
+                v = v + step
+                t = time.perf_counter()
+                self.set_voltage(v)
+                with self._lock:
+                    voltage = float(self.query("MEAS:VOLT?"))
+                    current = float(self.query("MEAS:CURR?"))
+                if self.series is not None:
+                    self.series.samples_voltage.append((t, voltage))
+                    self.series.samples_current.append((t, current))
+                if current > 0:
+                    trigger_event.set()
+                if stop_event.is_set() or self._abort.is_set():
+                    self.logger.warning("Stop Event or Abort Event is called. Stopping sweep")
+                    self.stop_output()
+            except RuntimeError:
+                break
+            except Exception as e:
+                self.logger.exception("PSU sweep error")
                 break
 
     def getStatus(self):

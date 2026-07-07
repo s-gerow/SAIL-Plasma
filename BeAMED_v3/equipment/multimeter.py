@@ -53,7 +53,7 @@ class KeithleyDMM6500(VisaEquipment):
         self._running = False
         return read
     
-    def start_continuous_measure(self):
+    def start_continuous_measure(self, trigger_event: threading.Event | None, trigger_value: float):
         if self._running:
             self.logger.warning("Continuous dmm acquisition thread already runnning")
             return
@@ -64,7 +64,11 @@ class KeithleyDMM6500(VisaEquipment):
         self._thread = threading.Thread(
             target = self._acquire,
             daemon=True,
-            name = "dmm_acquisition"
+            name = "dmm_acquisition",
+            kwargs={
+                "trigger_event":trigger_event,
+                "trigger_value":trigger_value
+            }
         )
         self._thread.start()
         self.logger.info("DMM continuous acquisition started")
@@ -85,7 +89,7 @@ class KeithleyDMM6500(VisaEquipment):
         with self._lock:
             self.write(f"SENS:{self._mode}:RANG:AUTO FALSE")
 
-    def _acquire(self):
+    def _acquire(self, trigger_event: threading.Event | None = None, trigger_value: float = 0.0):
         self._cursor = 1
         while self._running:
             try:
@@ -95,7 +99,9 @@ class KeithleyDMM6500(VisaEquipment):
                 with self._lock:
                     values = float(self.query(":READ?"))
                 readings = [(t, values)]
-
+                if trigger_event:
+                    if values < trigger_value:
+                        trigger_event.set()
                 if self.series is not None:
                     with self._lock:
                         if self._mode in ("VOLT:DC"):
