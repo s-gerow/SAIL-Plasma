@@ -14,7 +14,7 @@ from gui.frames.multimeterframe import MultimeterFrame
 from gui.frames.powersupplyframe import PowerFrame
 from gui.frames.experimentframe import ExperimentControlFrame
 from threadcontroller import Controller
-from datatypes import ConnectResult, ActionResult, DisconnectResult
+from datatypes import ConnectResult, ActionResult, DisconnectResult, ExperimentComplete
 
 class BeAMEDWindow(tk.Tk):
     POLL_INTERVAL_MS = 50
@@ -160,6 +160,8 @@ class BeAMEDWindow(tk.Tk):
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
 
+        file_menu.add_command(label="Query Abort Event", command=self._query_abort_event)
+        file_menu.add_command(label="Reset Abort", command=self._reset_abort_event)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
         # Edit
@@ -191,6 +193,11 @@ class BeAMEDWindow(tk.Tk):
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
 
+    def _query_abort_event(self):
+        self.logger.info(f"Abort Event Status: {self.controller.event_abortAll.is_set()}")
+
+    def _reset_abort_event(self):
+        self.controller.event_abortAll.clear()
 
     def _poll(self):
         #self.logger.debug("Polling queue...")
@@ -231,6 +238,7 @@ class BeAMEDWindow(tk.Tk):
                     frame.handle_result(result)
                 else:
                     self.logger.warning(f"Unhandled action result: {result.action}")
+        elif isinstance(result, ExperimentComplete)
         else:
             self.logger.warning(f"Unkown result type on queue: {type(result)}")
 

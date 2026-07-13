@@ -132,6 +132,9 @@ class PowerFrame(BaseFrame):
             self._enable = True
         elif result.action == "pwr_disable_output":
             self._enable = False
+        if result.action == "pwr_voltage_sweep":
+            self._output = True
+            self._poll()
         else:
-            self.logger.warning(f"Unhandled dmm result: {result.action}")
+            self.logger.warning(f"Unhandled pwr result: {result.action}")
         

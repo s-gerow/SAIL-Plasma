@@ -55,7 +55,7 @@ class Keithley2260B_800_1(VisaEquipment):
         self._output = True
         with self._lock:
             self.write("OUTP:STAT ON")
-        self._thread = threading.Thread(target=self._monitor,
+        self._thread = threading.Thread(target=self._voltage_sweep,
                                         daemon=True,
                                         name="pwr_sweep",
                                         kwargs={
@@ -132,6 +132,7 @@ class Keithley2260B_800_1(VisaEquipment):
                 v = v + step
                 t = time.perf_counter()
                 self.set_voltage(v)
+                time.sleep(2)
                 with self._lock:
                     voltage = float(self.query("MEAS:VOLT?"))
                     current = float(self.query("MEAS:CURR?"))
@@ -143,6 +144,7 @@ class Keithley2260B_800_1(VisaEquipment):
                 if stop_event.is_set() or self._abort.is_set():
                     self.logger.warning("Stop Event or Abort Event is called. Stopping sweep")
                     self.stop_output()
+                time.sleep(3)
             except RuntimeError:
                 break
             except Exception as e:

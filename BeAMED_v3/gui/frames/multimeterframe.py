@@ -74,6 +74,17 @@ class MultimeterFrame(BaseFrame):
             self._func_select()
         elif result.action == "dmm_meas":
             self.meas.set(float(result.data["result"]))
+        elif result.action == "dmm_start_cont_meas":
+            self._running = True
+            self._poll()
+        elif result.action == "dmm_stop":
+            self._running = False
+        elif result.action == "dmm_set_cont_mode":
+            func = self.controller.get(self.equipment)._mode
+            if func == "CONT":
+                self.meas.set_unit("\u03A9")
+            elif func == "VOLT:DC":
+                self.meas.set_unit("V")
         # elif result.action == "dmm_cont_meas":
         #     pass
         else:

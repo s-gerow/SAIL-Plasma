@@ -39,7 +39,7 @@ class ExperimentControlFrame:
         self.controller.run(action, self.equipment, method, **kwargs)
     
 class ExperimentInputFrame(tk.LabelFrame):
-    def __init__(self, parent, exp_controller: Controller):
+    def __init__(self, parent, exp_controller: ExperimentControlFrame):
         super().__init__(parent, text="Experiment Input")
         self.exp_controller = exp_controller
         self._input_vars: dict[str, tk.Variable] = {}
@@ -155,6 +155,9 @@ class ExperimentInputFrame(tk.LabelFrame):
         self.exp_controller.start_process()
 
     def _abort_series(self):
+        if self.exp_controller.controller.event_abortAll.is_set():
+            self.exp_controller.logger.warning("Series already aborted")
+            return
         self.exp_controller.stop_process()
 
 

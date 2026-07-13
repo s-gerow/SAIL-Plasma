@@ -34,7 +34,7 @@ class ExperimentProcess:
         self.controller = controller
         self.writer = writer
         self.logger = logging.getLogger("BeAMED.experiment")
-        self._abort = threading.Event()
+        self._abort = controller.event_abortAll
         self._thread: threading.Thread | None = None
 
         self.pi_settled_event = threading.Event()
@@ -43,8 +43,7 @@ class ExperimentProcess:
         self.feedthrough_ground_event = threading.Event()
         self.feedthrough_gap_set_event = threading.Event()
         self.power_trigger = threading.Event()
-        self.oscope_trigger = threading.Event()
-        
+        self.oscope_trigger = threading.Event()       
 
     def start(self, params: ExperimentParams):
         if self._thread and self._thread.is_alive():
@@ -112,18 +111,22 @@ class ExperimentProcess:
             self.power_trigger.clear()
             self.oscope_trigger.clear()
 
+            params.index = i
+
+            meta = DischargeMeta(index=i,
+                                 gap_cm=params.gap_cm,
+                                 gas_species=params.gas_species,
+                                 cathode_material=params.cathode_material,
+                                 anode_material=params.anode_material,
+                                 cathode_shape=params.cathode_shape,
+                                 anode_shape=params.anode_shape
+                                 )
+            self.controller.start_run(f"discharge_{i+1:03d}", meta)
+
             self.logger.info(f"Discharge {i+1}/{params.n_discharges} - target pressure {pressure:.3f} Torr")
-            success, result_str = self._run_discharge(pressure, params, nidaq)
+            discharge_result = self._run_discharge(pressure, params, nidaq)
 
             self._wait_for_thread_close(nidaq, dmm, scope, pwr)
-
-            if not success:
-                notes = result_str
-            else:
-                trigger_source = result_str
-
-
-
 
             self.logger.info("Venting chamber to atmosphere")
             self._wait_for_atmosphere(nidaq) #, timeout=300)
@@ -134,10 +137,38 @@ class ExperimentProcess:
             )
         )
 
-    def _run_discharge(self, pressure, params: ExperimentParams, nidaq) -> tuple[bool, str]:
+    def _run_discharge(self, pressure, params: ExperimentParams, nidaq) -> DischargeComplete | DischargeSkipped:
         # starting at atmosphere
         MIN_PRESSURE = 1 # Torr
         try:
+            # because the valves and feedthrough are on different output tasks we need to either stop all of the
+            # valves while setting feedthrough. or we set the feedthrough before all of the pressure stuff is done. 
+            # This is controversial. by setting the feedthrough before pulling out all of the gas we could accidentally
+            # move the feedthrough. But by closing the valves mid experiment we will cause a leak and ruin the gas composition.
+            # going to set the feedthrough first for now until a new way to do this is figured out.
+            self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
+            # first need to enable do_feedthrough and disable do_valves
+            self.controller.run("nidaq_deactivate_do_valves", "nidaq", "_disconnect_valves")
+            self.controller.run("nidaq_activate_do_feedthrough", "nidaq", "_connect_feedthrough")
+            # set dmm to continuity mode
+            self.controller.run("dmm_set_cont_mode", "dmm", "func_select", func="CONT")
+            # start dmm acquisition with event to trigger when resistance < threshold
+            self.controller.run("dmm_start_cont_meas", "dmm", "start_continuous_measure", trigger_event = self.feedthrough_ground_event, trigger_value = 270)
+            # start feedthrough for with dmm trigger as stop
+            self.controller.run("nidaq_ground_feedthrough", "nidaq", "start_feedthrough", dir_ = True, stop_event = self.feedthrough_ground_event)
+            # wait for dmm trigger, then wait for some time to allow feedthrough to stop
+            while not self.feedthrough_ground_event.is_set():
+                time.sleep(0.01)
+            time.sleep(0.5)
+            # start feedthrough set to params distance with set trigger
+            self.controller.run("nidaq_set_feedthrough", "nidaq", "step_feedthrough_cm", dir_ = False, cm = params.gap_cm, trigger_event = self.feedthrough_gap_set_event)
+            # wait for feedthrough trigger
+            while not self.feedthrough_gap_set_event.is_set():
+                time.sleep(0.01)
+            self.controller.run("nidaq_deactivate_do_feedthrough", "nidaq", "_disconnect_feedthrough")
+            self.controller.run("nidaq_activate_do_valves", "nidaq", "_connect_valves")
+            time.sleep(0.5)
+            self.logger.info("Setting chamber pressure")
             # open pump valve to get to min pressure
             self.controller.run("nidaq_open_main_pump", 'nidaq', "open_valve", valve=0)
             # start reading with a target of min pressure, as the pressure drops to equal or less than target, set the event
@@ -153,28 +184,13 @@ class ExperimentProcess:
             self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
             self.controller.run("nidaq_start_pi", 'nidaq', "start_PI", settled_event = self.pi_settled_event)
             # wait for settled event to trigger
-            while not self.pi_settled_event:
+            while not self.pi_settled_event.is_set():
                 time.sleep(0.01)
             self.logger.info(f"Chamber pressure stable at {nidaq.pressure.latest[1]} Torr")
-            # set dmm to continuity mode
-            self.controller.run("dmm_set_cont_mode", "dmm", "func_select", func="CONT")
-            # start dmm acquisition with event to trigger when resistance < threshold
-            self.controller.run("dmm_start_cont_meas", "dmm", "start_continuous_measure", trigger_event = self.feedthrough_ground_event, trigger_value = 100)
-            # start feedthrough for with dmm trigger as stop
-            self.controller.run("nidaq_ground_feedthrough", "nidaq", "start_feedthrough", dir_ = True, stop_event = self.feedthrough_ground_event)
-            # wait for dmm trigger, then wait for some time to allow feedthrough to stop
-            while not self.feedthrough_ground_event:
-                time.sleep(0.01)
-            time.sleep(0.5)
-            # start feedthrough set to params distance with set trigger
-            self.controller.run("nidaq_set_feedthrough", "nidaq", "step_feedthrough_cm", dir_ = False, cm = params.gap_cm, stop_event = None)
-            # wait for feedthrough trigger
-            while not self.feedthrough_gap_set_event:
-                time.sleep(0.01)
             # set dmm in voltage mode
             self.controller.run("dmm_set_cont_mode", "dmm", "func_select", func="VOLT:DC")
             # start dmm reading
-            self.controller.run("dmm_start_cont_meas", "dmm", "start_continuous_measure")
+            self.controller.run("dmm_start_cont_meas", "dmm", "start_continuous_measure", trigger_event = None, trigger_value = 0.0)
             # arm oscilloscope trigger 
             self.controller.run("osc_arm_trigger", "osc", "arm_trigger", trigger_event = self.oscope_trigger)
             # start voltage increase methode with power supply trigger
@@ -187,20 +203,23 @@ class ExperimentProcess:
             # wait for power supply or oscope trigger.
             while not self.oscope_trigger.is_set() and not self.power_trigger.is_set():
                 time.sleep(0.01)
+            
             # record which event triggers first
             if self.oscope_trigger.is_set():
                 trigger_str = "osc"
             elif self.power_trigger.is_set():
                 trigger_str = "pwr"
+            self.logger.info(f"Discharge detected. Source: {trigger_str}")
             # check to ensure all threads have closed/check all triggers.
             self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
-            self.controller.run("dmm_stop", "dmm", "stop_continuous_measurement")
+            self.controller.run("dmm_stop", "dmm", "stop_continuous_measure")
             
+
             
         except Exception as e:
             self.logger.warning(f"experiment run failed due to exception: {str(e)}")
-            return False, str(e)
-        return True, trigger_str
+            return DischargeSkipped(params.index, str(e))
+        return DischargeComplete(params.index, nidaq.pressure.latest[1], self.controller.get("pwr").latest[0], self.controller.get("pwr").latest[1], trigger_str)
 
     def _wait_for_thread_close(self, nidaq: NIDAQEquipment, dmm: KeithleyDMM6500, osc: SiglentSDS1204XE, pwr: Keithley2260B_800_1):
         if nidaq.pressure._running:
@@ -211,12 +230,13 @@ class ExperimentProcess:
             self.controller.run("pwr_stop", "pwr", "stop")
         if not osc.triggered:
             self.controller.run("osc_stop", "osc", "stop")
+        time.sleep(0.5)
 
         
 
     def _wait_for_atmosphere(self, nidaq: NIDAQEquipment):
-        nidaq.open_valve(1)
-        nidaq.start_pressure_acquisition(stop_event=self.pressure_atmosphere_set, target_=750, target_trigger='rising')
+        nidaq.open_valve(2)
+        self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition", stop_event = self.pressure_atmosphere_set, target_=750, target_trigger='rising')
         while not self.pressure_atmosphere_set.is_set():
             time.sleep(0.01)
         self.logger.info("Chamber reached atmospheric pressure")

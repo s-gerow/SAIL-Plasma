@@ -107,13 +107,13 @@ class PressureFrame(BaseFrame):
         # Valve Control Panel
         HeaderLabel(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        self.btn_vent = tk.Button(control_col, text="Vent Chamber", command=lambda:self._control_valve(1))
+        self.btn_vent = tk.Button(control_col, text="Vent Chamber", command=lambda:self._control_valve(2))
         self.btn_vent.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         self.btn_pump_main = tk.Button(control_col, text="Pump Chamber (main)", command=lambda:self._control_valve(0))
         self.btn_pump_main.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
-        self.btn_pump_sec = tk.Button(control_col, text="Pump Chamber (secondary)", command=lambda: self._control_valve(2))
+        self.btn_pump_sec = tk.Button(control_col, text="Pump Chamber (secondary)", command=lambda: self._control_valve(1))
         self.btn_pump_sec.grid(row=row_num, column=0, columnspan=2)
         row_num += 1
         self.btn_valve_close = tk.Button(control_col, text="Close Valves", command=self._close_valves)
@@ -366,5 +366,7 @@ class PressureFrame(BaseFrame):
         if result.action == "nidaq_pressure_read":
             self._running = True
             self._poll()
+        if result.action == "nidaq_stop":
+            self._running = False
         else:
             self.logger.warning(f"Unhandled nidaq result: {result.action}")

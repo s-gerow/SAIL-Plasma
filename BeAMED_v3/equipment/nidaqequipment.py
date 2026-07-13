@@ -15,7 +15,7 @@ class NIDAQEquipment(Equipment):
         self.logger = logging.getLogger("BeAMED.nidaq")
         self.device_id = device_id
         self._task_lock = threading.Lock()
-        self._abort_event = threading.Event()
+        self._abort_event = abort_event
         self.tasks: dict[str, nidaqmx.Task] = {}
         self._connected = False
 
@@ -141,8 +141,8 @@ class NIDAQEquipment(Equipment):
         self.mfc.stop_pi()
 
     # Feedthrough Subsystem Wrappers
-    def step_feedthrough_cm(self, dir_: bool, cm: float, trigger_event: threading.Event):
-        self.feedthrough._step_for_cm(dir_, cm, trigger_event)
+    def step_feedthrough_cm(self, dir_: bool, cm: float, trigger_event: threading.Event | None = None, stop_event: threading.Event | None = None):
+        self.feedthrough._step_for_cm(dir_, cm, trigger_event, stop_event)
 
     def step_feedthrough(self, dir_: bool):
         self.feedthrough._step(dir_)
@@ -234,19 +234,23 @@ class subsystemPressure:
                     match target_trigger:
                         case 'falling':
                             if mks[-1] <= target_:
+                                
+                                self._running = False
+                                #self.logger.info(f"Target pressure hit with falling trigger. Running status: {self._running}")
                                 stop_event.set()
-                                self._runnning = False
                                 break
                         case 'rising':
                             if kjl[-1] >= target_:
-                                stop_event.set()
                                 self._running = False
+                                stop_event.set()
                                 break
                 if self._parent.mfc._running:
                     if self._parent.mfc._settled_event and not self._parent.mfc._settled_event.is_set():
-                        if (mks[-1] >= (self._parent.mfc._tolerance-self._parent.mfc._target)) and (mks[-1] <= (self._parent.mfc._tolerance+self._parent.mfc._target)):
+                        #self.logger.debug(f"Settled event waiting. Low end: {(self._parent.mfc._tolerance-self._parent.mfc._setpoint)} ; High end: {(self._parent.mfc._tolerance+self._parent.mfc._setpoint)}")
+                        if (mks[-1] >= (self._parent.mfc._setpoint-self._parent.mfc._tolerance)) and (mks[-1] <= (self._parent.mfc._tolerance+self._parent.mfc._setpoint)):
                             if settle_time_start:
                                 settle_time = time.perf_counter()-settle_time_start
+                                self.logger.debug(f"settle_time: {settle_time} s")
                                 if settle_time >= self._parent.mfc._settle_time:
                                     self._parent.mfc._settled_event.set()
                             else:
@@ -259,7 +263,7 @@ class subsystemPressure:
                 self.logger.exception("Error reading pressure")
                 break
         task.stop()
-        self.logger.info("Pressure acquisition stopped")
+        self.logger.info(f"Pressure acquisition stopped. ")#Running status: {self._running}")
 
     @property
     def latest(self) -> tuple[float, float]:
@@ -334,7 +338,7 @@ class subsystemMFC:
             t=time.perf_counter()
             with self._lock:
                 self.series.samples_setpoint.append((t,sccm))
-        self.logger.debug(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
+        #self.logger.debug(f"MFC setpoint: {sccm} sccm ({volts:.3f} V)")
 
     # def read_flow(self) -> float:
     #     with self._parent._task_lock:
@@ -347,7 +351,7 @@ class subsystemMFC:
     #     return sccm
     
     def start_pi(self, settled_event: threading.Event | None = None,
-                 tolerance: float = 0.25, settle_time: float=50.0):
+                 tolerance: float = 0.05, settle_time: float=30.0):
         if self._running:
             self.logger.warning("PI control loop already runnning")
             return
@@ -426,8 +430,8 @@ class subsystemFeedthrough:
             self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
         time.sleep(self.STEP_DELAY)
 
-    def _step_for_cm(self, dir_: bool = True, cm: float = 1.0, trigger_event: threading.Event | None = None):
-        direction_str = "Up" if dir_ else "Down"
+    def _step_for_cm(self, dir_: bool = True, cm: float = 1.0, trigger_event: threading.Event | None = None, stop_event: threading.Event | None = None):
+        direction_str = "Down" if dir_ else "Up"
         self._parent.logger.debug(f"Stepping feedthrough {cm} cm in direction {direction_str}")
         steps = int(cm*self.STEPS_PER_CM)
         dir_state = dir_
@@ -446,17 +450,20 @@ class subsystemFeedthrough:
                 if trigger_event:
                     trigger_event.set()
                 return
+            if stop_event and stop_event.is_set():
+                self._parent.logger.warning("Stop Event detected. Stopping feedthrough.")
+                return
         if trigger_event:
             trigger_event.set()
             
     def _step_until(self, stop_event: threading.Event, dir_: bool = True):
-        direction_str = "Up" if dir_ else "Down"
+        direction_str = "Down" if dir_ else "Up"
         self._parent.logger.debug(f"Stepping feedthrough in direction {direction_str}")
         dir_state = dir_
         with self._parent._task_lock:
             self._parent.tasks['do_feedthrough'].write([False, dir_state], auto_start=True)
         time.sleep(0.00005)
-        while not stop_event.is_set():
+        while not stop_event.is_set() and not self._parent._abort_event.is_set():
             with self._parent._task_lock:
                 self._parent.tasks["do_feedthrough"].write([True, dir_state], auto_start=True)
             time.sleep(self.STEP_DELAY)
@@ -464,10 +471,12 @@ class subsystemFeedthrough:
                 self._parent.tasks["do_feedthrough"].write([False, dir_state], auto_start=True)
             time.sleep(self.STEP_DELAY)
             if self._parent._abort_event.is_set():
+                self._parent.logger.warning("Abort Event detected. Stopping feedthrough.")
                 return
             if stop_event.is_set():
                 self._parent.logger.warning("Stop Event detected. Stopping feedthrough.")
                 return
+            
 
     def get_status(self):
         return False

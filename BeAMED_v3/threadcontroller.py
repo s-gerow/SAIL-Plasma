@@ -135,15 +135,15 @@ class Controller:
 
         dmm = self.registry.get("dmm")
         if dmm:
-            dmm.series = None
+            dmm.series = run.dmm
 
         psu = self.registry.get("pwr")
         if psu:
-            psu.series = None
+            psu.series = run.power_supply
 
         scope = self.registry.get("osc")
         if scope:
-            scope.series = None
+            scope.series = run.waveform
 
         completed = self.current_run
         self.current_run = None

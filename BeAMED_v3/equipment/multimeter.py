@@ -45,6 +45,7 @@ class KeithleyDMM6500(VisaEquipment):
         with self._lock:
             self.write(f':SENS:FUNC "{func}"')
         self._mode = func
+        self.logger.info(f"Function set to {func}")
     
     def measure(self):
         self._running = True
@@ -102,12 +103,17 @@ class KeithleyDMM6500(VisaEquipment):
                 if trigger_event:
                     if values < trigger_value:
                         trigger_event.set()
+                        self._running = False
                 if self.series is not None:
                     with self._lock:
                         if self._mode in ("VOLT:DC"):
                             self.series.samples_voltage.extend(readings)
                         elif self._mode in ("CONT"):
                             self.series.samples_resistance.extend(readings)
+                if self._abort.is_set():
+                    self.logger.warning("Abort Event detected. Stopping DMM reading.")
+                    self._running = False
+                    break
             except Exception as e:
                 self.logger.exception("DMM acquisition error")
                 break

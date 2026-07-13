@@ -95,6 +95,7 @@ class ExperimentParams:
     dwell_time: float
     target_pressure: float
     pi_timeout: float = 120
+    index: int | None = None
 
     gas_species: str = ""
     cathode_material: str = ""
