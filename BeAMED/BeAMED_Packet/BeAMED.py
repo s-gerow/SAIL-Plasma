@@ -663,6 +663,7 @@ class Experiment():
         self.log_message(thread, level, "Starting Continuos Voltage Reading")
         live_dmm = Thread(target = lambda: self.readDmm(), daemon=True, name="Multimeter Monitor")
         live_dmm.start()
+
         #thread monitors oscilliscope for trigger
         live_osc = Thread(target = lambda: self.readOsc(), daemon = True, name="Oscilloscope Monitor")
         live_osc.start()

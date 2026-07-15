@@ -17,6 +17,7 @@ __pycache__/
 *.txt
 *.xlsx
 *csv
+*.gif
 
 #MACOS
 *.DS_Store
@@ -34,9 +35,10 @@ Figures/
 
 #other
 .vscode
+*.zip
+BeAMED/Test Scripts/Figures/*
 *.png
 *.svg
-*.zip
 
 *.gif
 

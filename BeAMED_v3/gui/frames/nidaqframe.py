@@ -1,0 +1,372 @@
+import tkinter as tk
+from tkinter import ttk
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+import logging
+import time
+from collections import deque
+import threading
+
+from datatypes import ActionResult, ConnectResult
+from gui.frames.styles import HeaderLabel, IND_ON, IND_ERROR, ValueDisplay, IndicatorButton
+from gui.frames.baseframe import BaseFrame
+from threadcontroller import Controller
+
+class PressureFrame(BaseFrame):
+    POLL_MS = 100
+    WINDOW_S = 60
+    MAX_POINTS = 600
+
+    def __init__(self, parent, controller: Controller, equipment_name = "nidaq", text="Pressure"):
+        super().__init__(parent, controller, equipment_name, text)
+
+        self._t_start = time.perf_counter()
+        self._times = deque(maxlen=self.MAX_POINTS)
+        self._kjl_pressure = deque(maxlen=self.MAX_POINTS)
+        self._mks_pressure = deque(maxlen=self.MAX_POINTS)
+
+        self._mfc_setpoint = deque(maxlen=self.MAX_POINTS)
+        self._mfc_readback = deque(maxlen=self.MAX_POINTS)
+
+        self._pressure_monitor_params: dict[str, tk.Variable] = {}
+        self._running = False
+        self._stepping = False
+        self._build()
+
+    def _build(self):
+        super()._build()
+        self._build_controls()
+        self._build_feedthrough_panel()
+        self._build_readout()
+        self._build_plot()
+
+    def _build_controls(self):
+        control_col = tk.Frame(self.frame)
+        control_col.pack(fill="y",side="right")
+
+        control_col.columnconfigure(0,weight=1)
+        control_col.columnconfigure(1,weight=1)
+        
+        # Pressure Monitor Set-Up
+        row_num = 0
+        HeaderLabel(control_col, text="Pressure Monitor").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Label(control_col, text="Poll Frequency (ms)").grid(row=row_num, column=0)
+        self._pressure_monitor_params["poll_freq"] = tk.DoubleVar(value=self.POLL_MS)
+        ttk.Spinbox(control_col, 
+                    textvariable=self._pressure_monitor_params["poll_freq"],
+                    from_=1,
+                    to=500,
+                    state="disabled",
+                    increment=0.1).grid(row=row_num,column=1)
+
+        row_num += 1
+        tk.Button(control_col, text="Start Pressure Monitor Thread", command=self._start).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Stop Pressure Monitor Thread", command=self._stop).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Clear Pressure Series", command = self._clear).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+
+        # PI Control Panel
+        HeaderLabel(control_col, text="PI Controller").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Label(control_col, text="Setpoint (Torr)").grid(row=row_num, column=0)
+        self._pressure_setpoint = tk.DoubleVar(value = 1.0)
+        ttk.Spinbox(control_col,
+                    textvariable=self._pressure_setpoint,
+                    from_=0.1,
+                    to=10,
+                    increment=0.05).grid(row=row_num, column=1)
+        row_num += 1
+        tk.Label(control_col, text="K_p").grid(row=row_num, column=0)
+        self._pressure_monitor_params["pi_kp"] = tk.DoubleVar(value=0.1)
+        ttk.Spinbox(control_col, 
+                    textvariable=self._pressure_monitor_params["pi_kp"],
+                    from_=0,
+                    to=1,
+                    increment=0.05).grid(row=row_num,column=1)
+        row_num += 1
+        tk.Label(control_col, text="K_i").grid(row=row_num, column=0)
+        self._pressure_monitor_params["pi_ki"] = tk.DoubleVar(value=0.005)
+        ttk.Spinbox(control_col, 
+                    textvariable=self._pressure_monitor_params["pi_ki"],
+                    from_=0,
+                    to=1,
+                    increment=0.001).grid(row=row_num,column=1)
+        row_num += 1
+        tk.Button(control_col, text="Set Pressure",command=self._configure_pi).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Start PI Controller", command=self._start_pi).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Stop PI Controller", command=self._stop_pi).grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        tk.Button(control_col, text="Clear PI Series").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+
+        # Valve Control Panel
+        HeaderLabel(control_col, text="Valve Control").grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        self.btn_vent = tk.Button(control_col, text="Vent Chamber", command=lambda:self._control_valve(2))
+        self.btn_vent.grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        self.btn_pump_main = tk.Button(control_col, text="Pump Chamber (main)", command=lambda:self._control_valve(0))
+        self.btn_pump_main.grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        self.btn_pump_sec = tk.Button(control_col, text="Pump Chamber (secondary)", command=lambda: self._control_valve(1))
+        self.btn_pump_sec.grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        self.btn_valve_close = tk.Button(control_col, text="Close Valves", command=self._close_valves)
+        self.btn_valve_close.grid(row=row_num, column=0, columnspan=2)
+        row_num += 1
+        
+    def _build_readout(self):
+        row = tk.Frame(self.frame)
+        row.pack(fill="x", side="top")
+
+        self._kjl_var = tk.StringVar(value = "---")
+        ValueDisplay(row, "KJL", unit = "Torr", textvariable=self._kjl_var).pack(side="left")
+
+        self._mks_var = tk.StringVar(value = "---")
+        ValueDisplay(row, "MKS", unit="Torr", textvariable=self._mks_var).pack(side="left")
+
+    def _build_feedthrough_panel(self):
+        self.feedthrough_frame = tk.LabelFrame(self._parent, text="Feedthrough")
+        connect_frame = tk.Frame(self.feedthrough_frame)
+        connect_frame.pack(side='top', fill="x")
+        button_frame = tk.Frame(self.feedthrough_frame)
+        button_frame.pack(side="top",fill="both")
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        button_frame.columnconfigure(2, weight=1)
+        button_frame.columnconfigure(3, weight=1)
+        
+
+        self.feedthrough_indicator = IndicatorButton(connect_frame, on_color=IND_ON, off_color=IND_ERROR)
+        self.feedthrough_indicator.pack(side="left")
+        self.feedthrough_btn = tk.Button(connect_frame, text="Activate", command=self._activate_feedthrough)
+        self.feedthrough_btn.pack(side="left")
+        
+        self.feedthrough_direction = tk.BooleanVar(value=True)
+        tk.Label(button_frame, text="Direction (Up: False, Down: True)").grid(row=0, column=0, columnspan=3)
+        ttk.Combobox(button_frame, 
+                   values=[True, False],
+                   textvariable=self.feedthrough_direction
+                   ).grid(row=0, column=3)
+        self.btn_step_feedthrough = tk.Button(button_frame, text="Step", command=self._step_feedthrough)
+        self.btn_step_feedthrough.grid(row=1, column=0)
+        self.feedthrough_steps = tk.DoubleVar(value=1)
+        tk.Spinbox(button_frame,
+                from_ = 0.1,
+                to = 2.5,
+                increment=0.1,
+                textvariable=self.feedthrough_steps).grid(row=1, column=1)
+        self.btn_step_feedthrough_cm = tk.Button(button_frame, text="Step (cm)", command=self._step_feedthrough_cm)
+        self.btn_step_feedthrough_cm.grid(row=1, column=2)
+        self.stop_event = threading.Event()
+        self.btn_stop_feedthrough = tk.Button(button_frame, text="Stop", command = self.stop_event.set)
+        self.btn_stop_feedthrough.grid(row=1,column=3)
+
+    def _build_plot(self):
+        self.fig = Figure(figsize=(5,3), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.ax2 = self.ax.twinx()
+        self._style_axes()
+
+        self._line_kjl, = self.ax.plot([], [], linewidth=0.8, label="KJL")
+        self._line_mks, = self.ax.plot([], [], linewidth=0.8, label="MKS")
+        self._line_mfc_s, = self.ax2.plot([], [], linewidth=0.8, label="MFC Set")
+        self._line_mfc_r, = self.ax2.plot([], [], linewidth=0.8, label="MFC Read")
+
+        self.ax.legend()
+        self.ax2.legend()
+
+        self.canvas = FigureCanvasTkAgg(self.fig, self.frame)
+        NavigationToolbar2Tk(self.canvas, self).pack(fill="x")
+        self.canvas.get_tk_widget().pack(side="bottom",fill="both", expand=True)
+
+    def _style_axes(self):
+        self.ax.set_ylabel('Pressure (Torr)')
+        self.ax.set_xlabel('Time (s)')
+
+
+        self.ax2.set_ylabel('Flow (sccm)')
+        self.ax2.set_ylim((0,110))
+
+
+        self.ax2.legend(loc='upper center', bbox_to_anchor=(0.5,1.05), ncol=2, fancybox=True, shadow=True)
+        self.ax.legend(loc='upper center', bbox_to_anchor=(0.5,0.98), ncol=2, fancybox=True, shadow=True)
+        self.ax.spines['top'].set_visible(False)
+        self.ax2.spines['top'].set_visible(False)
+        self.fig.tight_layout()
+
+    def _start(self):
+        self.controller.run("nidaq_start_pressure", self.equipment, "start_pressure_acquisition")
+        self._running = True
+        self._poll()
+        self.logger.info("Pressure display started")
+
+    def _stop(self):
+        self._running = False
+        self.controller.run("nidaq_stop_pressure",self.equipment,"stop_pressure_acquisition")
+        self.logger.info("Pressure display stopped")
+
+    def _clear(self):
+        self._times.clear()
+        self._kjl_pressure.clear()
+        self._mks_pressure.clear()
+        self._mfc_readback.clear()
+        self._mfc_setpoint.clear()
+        self._t_start = time.perf_counter()
+        self._line_kjl.set_data([],[])
+        self._line_mks.set_data([],[])
+        self._line_mfc_r.set_data([],[])
+        self._line_mfc_s.set_data([],[])
+        self.canvas.draw()
+
+    def _disable_vent_buttons(self):
+        self.btn_vent.config(state="disabled")
+        self.btn_valve_close.config(state="disabled")
+        self.btn_pump_main.config(state="disabled")
+        self.btn_pump_sec.config(state="disabled")
+
+
+    def _enable_vent_buttons(self):
+        self.btn_vent.config(state="active")
+        self.btn_valve_close.config(state="active")
+        self.btn_pump_main.config(state="active")
+        self.btn_pump_sec.config(state="active")
+
+
+    def _enable_feedthrough_buttons(self):
+        self.btn_step_feedthrough_cm.config(state="active")
+        self.btn_step_feedthrough.config(state="active")
+        
+
+    def _disable_feedthrough_buttons(self):
+        self.btn_step_feedthrough.config(state="disabled")
+        self.btn_step_feedthrough_cm.config(state="disabled")
+        
+        
+    def _activate_feedthrough(self):
+        # diable pump buttons and disconnect pump task
+        # connect feedthrough task, enable feedthrough buttons
+        # switch activate to deactivate, change indicator to greed
+        self._disable_vent_buttons()
+        self._enable_feedthrough_buttons()
+        self.feedthrough_btn.config(text="Deactivate", command=self._deactivate_feedthrough)
+        self._run("nidaq_activate_feedthrough", "_connect_feedthrough")
+        self._run("nidaq_deactivate_vent", "_disconnect_valves")
+        self.feedthrough_indicator.set(True)
+
+    def _deactivate_feedthrough(self):
+        # disable feedthrough buttons, disconnect feedthrough task
+        # enable pump buttons, disconnect pump task
+        # switch deactivate to activate, change indicator to red
+        self._enable_vent_buttons()
+        self._disable_feedthrough_buttons()
+        self.feedthrough_btn.config(text="Activate", command=self._activate_feedthrough)
+        self._run("nidaq_deactivate_feedthrough", "_disconnect_feedthrough")
+        self._run("nidaq_activate_vent", "_connect_valves")
+        self.feedthrough_indicator.set(False)
+
+    def _control_valve(self, valve: int):
+        self.controller.run(f"nidaq_open_valve_{valve}", self.equipment, "open_valve", valve=valve)
+
+    def _close_valves(self):
+        self.controller.run("nidaq_close_valves",self.equipment,"close_valves")
+
+    def _configure_pi(self):
+        kp = self._pressure_monitor_params['pi_kp'].get()
+        ki = self._pressure_monitor_params['pi_ki'].get()
+        set_point = self._pressure_setpoint.get()
+
+        self.controller.run("nidaq_set_pi", self.equipment, "set_PI", ki=ki, kp=kp,pressure_torr = set_point)
+
+    def _start_pi(self):
+        self.controller.run("nidaq_start_pi", self.equipment, "start_PI")
+
+    def _stop_pi(self):
+        self.controller.run("nidaq_stop_pi", self.equipment, "stop_PI")
+
+    def _clear_pi(self):
+        pass
+
+    def _poll(self):
+        if not self._running:
+            return
+        
+        nidaq = self.controller.get(self.equipment)
+        
+        kjl, mks = nidaq.pressure.latest
+        setpoint, readpoint = nidaq.mfc.latest
+        t = time.perf_counter() - self._t_start
+
+        self._times.append(t)
+        self._kjl_pressure.append(kjl)
+        self._mks_pressure.append(mks)
+        self._mfc_setpoint.append(setpoint)
+        self._mfc_readback.append(readpoint)
+
+        self._kjl_var.set(f"{kjl:.4f}")
+        self._mks_var.set(f"{mks:.4f}")
+
+        self._update_plot()
+
+        self.after(self.POLL_MS, self._poll)
+
+    def _update_plot(self):
+        times = list(self._times)
+        kjl_p = list(self._kjl_pressure)
+        mks_p = list(self._mks_pressure)
+        mfc_s = list(self._mfc_setpoint)
+        mfc_r = list(self._mfc_readback)
+        
+        if not times:
+            return
+        
+        self._line_kjl.set_data(times, kjl_p)
+        self._line_mks.set_data(times, mks_p)
+        self._line_mfc_s.set_data(times, mfc_s)
+        self._line_mfc_r.set_data(times, mfc_r)
+
+        window = self.WINDOW_S
+        t_now = times[-1]
+        self.ax.set_xlim(max(0, t_now - window), t_now + 1)
+
+        all_valls = kjl_p+mks_p
+
+        if all_valls:
+            mn, mx = min(all_valls), max(all_valls)
+            margin = max((mx-mn)*0.1, 0.05)
+            self.ax.set_ylim(mn-margin, mx+margin)
+
+        self.canvas.draw()
+
+    def _step_feedthrough(self):
+        if self._stepping:
+            self.logger.warning("Feedthrough already running")
+            return
+        self._run("nidaq_step_feedthrough", "step_feedthrough", dir_ = self.feedthrough_direction.get())
+
+    def _step_feedthrough_cm(self):
+        if self._stepping:
+            self.logger.warning("Feedthrough already running")
+            return
+        self.logger.debug(f"{self.feedthrough_direction.get()}")
+        self.stop_event.clear()
+        self._run("nidaq_step_feedthrough_cm", "step_feedthrough_cm", dir_ = self.feedthrough_direction.get(), cm = self.feedthrough_steps.get(), stop_event = self.stop_event)
+
+    def handle_result(self, result: ActionResult):
+        if not result.success:
+            self.logger.error(f"nidaq action failed: {result.error}")
+            return
+        if result.action == "nidaq_step_feedthrough_cm":
+            self._stepping = False
+        if result.action == "nidaq_pressure_read":
+            self._running = True
+            self._poll()
+        if result.action == "nidaq_stop":
+            self._running = False
+        else:
+            self.logger.warning(f"Unhandled nidaq result: {result.action}")

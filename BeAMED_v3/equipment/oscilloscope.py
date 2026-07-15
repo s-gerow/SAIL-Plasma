@@ -1,0 +1,181 @@
+import sys
+import time
+from typing import Literal
+import threading
+
+import numpy as np
+import pyvisa
+
+from equipment.visaequipment import VisaEquipment
+from datatypes import Waveform
+
+class SiglentSDS1204XE(VisaEquipment):
+    """
+    Equipment object which controls the Siglent SDS1204X-E oscilloscope used by AMPS@SAIL to detect the current at the 
+    moment of electrical discharge initialization.
+
+    Parameters
+    ----------
+    manager : pyvisa.ResourceManager
+        Pyvisa resource manager used to connect and communicate with devices which use VISA methods, this is None by default but must be supplied otherwise the device cannot be communicated with.
+    name : str, optional
+        Name of the oscilloscope as used in dictionaries, logs, and method calls. This is the readable interface by which this object is identified in interactions with other objects and the user, by default "Oscilloscope".
+    resource_id : _type_, optional
+        Resource identification string used by VISA inferfaces to connect and communication with the device, unique to each individual instrument, by default "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR".
+    """
+    def __init__(self,  manager: pyvisa.ResourceManager, name:str = "oscilloscope", resource_id:str = "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR", abort_event: threading.Event | None = None):
+        """
+        Initialize and return SiglentSDS1204XE object using default resource identification string
+
+        Parameters
+        ----------
+        manager : pyvisa.ResourceManager
+            Pyvisa resource manager used to connect and communicate with devices which use VISA methods, this is None by default but must be supplied otherwise the device cannot be communicated with.
+        name : str, optional
+            Name of the oscilloscope as used in dictionaries, logs, and method calls. This is the readable interface by which this object is identified in interactions with other objects and the user, by default "Oscilloscope".
+        resource_id : _type_, optional
+            Resource identification string used by VISA inferfaces to connect and communication with the device, unique to each individual instrument, by default "USB0::0xF4EC::0xEE38::SDSMMFCD4R9625::INSTR".
+        """
+        super().__init__(name, manager, resource_id, abort_event=abort_event)
+        self.triggered = False
+        self.series: Waveform | None = None
+        self._lock = threading.Lock()
+
+    def configure(self, channel: str = "C1", vdiv: float = 1.0, tdiv: float=1e-3, trigger_level:float=0.5, trigger_slope:Literal["POS", "NEG", "WINDOW"] ="POS"):
+        """
+        Configure common oscillscope settings.
+
+        Parameters
+        ----------
+        channel : str, optional
+            Channel to read data and trigger on, by default "C1"
+        vdiv : float, optional
+            Voltage sensitivity in volts/division, by default 1.0
+        tdiv : float, optional
+            Horizontal scale per division of window in seconds, by default 1e-3
+        trigger_level : float, optional
+            Input voltage (volts) on the given channel required to activate the trigger, by default 0.5
+        trigger_slope : Literal["POS", "NEG", &quot;WINDOW&quot;], optional
+            Trigger slope of specified source, by default "POS"
+
+        Notes
+        _____
+        This method can and should be overrriden/edited to add additional configurations if needed.
+        Presently it only includes the parameters which need to be set to adjust the trigger and screen resolution.
+        """
+        # Turn of character headers. Changes command responses from TIME_DIV 1e-3S to 1e-3
+        # This can also be set to TDIV 1e-3 but we dont want any characters in these responses, just numbers.
+        with self._lock:
+            self.write("CHDR OFF")
+            self.write(f"{channel}:ATTN {1}")
+            self.write(f"{channel}:OFST {0}")
+            self.write(f"{channel}:VDIV {vdiv}")
+            self.write(f"TDIV {tdiv}")
+            self.write(f"HPOS {0}")
+            self.write(f"TRMD NORM")
+            self.write(f"{channel}:TRSL {trigger_slope}")
+            self.write(f"TRSE EDGE,SR,{channel},HT,TI,HV,{1E-7}")
+            self.write(f"{channel}:TRLV {trigger_level}")
+
+    def arm_trigger(self, trigger_event: threading.Event | None = None):
+        """
+        Set the trigger mode on a pre-specifed source, see configure(). Single mode will trigger on the next valid signal. 
+        """
+        if self.triggered:
+            self.triggered = False
+        self.write("TRMD SINGLE")
+        t = threading.Thread(target=self._wait_for_trigger,
+                         daemon=True,
+                         name="osc_trigger",
+                         kwargs={
+                             "trigger_event": trigger_event
+                         })
+        t.start()
+
+
+
+    def _wait_for_trigger(self, poll_interval: float = 0.05,
+                         stop_event:threading.Event|None=None, abort_event=None, trigger_event: threading.Event | None = None) -> bool:
+        """
+        Blocks until scope triggers, stop_event fires, or abort_event fires.
+        Returns True if triggered, False if stopped/aborted.
+        This runs on its own thread — never call from GUI thread.
+        """
+        error_count = 0
+        abort_event = self._abort
+        while True:
+            if abort_event and abort_event.is_set():
+                self.triggered =  False
+                return False
+            if stop_event and stop_event.is_set():
+                self.triggered = False
+                return False
+            try:
+                with self._lock:
+                    status = self.query("SAST?")
+            except pyvisa.VisaIOError as e:
+                error_count += 1
+                self.logger.warning(f"VISA IO error {error_count}/3. skipping read")
+                
+                if error_count >= 3:
+                    self.logger.warning(f"VISA IO error 3/3. Aborting Trial")
+                    abort_event.set()
+                    return False
+                continue
+            if "Stop" in status:
+                self.triggered = True
+                if trigger_event:
+                    trigger_event.set()
+                return True
+            time.sleep(poll_interval)
+
+    def capture(self, channel: str = "C1") -> Waveform:
+        """Fetch waveform data from scope after trigger. Returns structured result."""
+        with self._lock:
+            self.write("CHDR OFF")
+            self.write(f"DATASOURCE {channel}")
+            self.write("DATA:ENCDG SRI")
+            self.write("DATA:WIDTH 2")
+            self.write("DATA:START 0")
+            self.write("DATA:STOP 1000")
+
+            sample_rate = float(self.query("SARA?"))
+            time_interval = 1 / sample_rate
+            tdiv  = float(self.query("TDIV?"))
+            offset = float(self.query(f"{channel}:OFST?"))
+            vdiv  = float(self.query(f"{channel}:VDIV?"))
+
+            self.write(f"{channel}:WF? DAT2")
+            raw = self.read_raw()[16:-2]
+        self.logger.debug(f"Response: {len(raw)} bytes")
+        codes = np.frombuffer(raw, dtype=np.uint8).astype(np.int16)
+        voltage = np.where(codes < 127,
+                           codes * (vdiv / 25) - offset,
+                           (codes - 256) * (vdiv / 25) - offset)
+        n = len(voltage)
+        time_axis = np.array([(tdiv * 14) - i * time_interval for i in range(n)])
+
+        wave = Waveform(
+            voltage=voltage,
+            time=time_axis,
+            dy=self.read_pkpk(), #float(np.max(voltage) - np.min(voltage)),
+            t_discharge=time.perf_counter()
+            )
+        self.series = wave
+        return wave
+
+    def stop(self):
+        with self._lock:
+            self.write("STOP")
+
+    def read_pkpk(self) -> float:
+        with self._lock:
+            result = self.query("C1:PARAMETER_VALUE? PKPK")
+        return result
+
+    def getStatus(self) -> dict:
+        base = super().get_status()
+        if self._connected:
+            with self._lock:
+                base["trigger_status"] = self.query("SAST?").strip()
+        return base
