@@ -6,9 +6,11 @@ import logging
 import time
 from typing import Any
 from equipment.baseequipment import Equipment
-from datatypes import ConnectResult, ActionResult, DisconnectResult, DischargeMeta, RunData, ExperimentParams
+from datatypes import ConnectResult, ActionResult, DisconnectResult, DischargeMeta, RunData, ExperimentParams, DischargeComplete, DischargeData, DischargeSkipped, PressureTimeseries, MFCTimeseries
 from hdf5_writer import HDF5Writer
 from process import ExperimentProcess
+import os
+from pathlib import Path
 
 
 class Controller:
@@ -114,11 +116,20 @@ class Controller:
                 error = str(e)
             ))
 
-    def configure_process(self, process: ExperimentProcess):
+    def configure_process(self, process: ExperimentParams):
         self.process_params = process
+        if self.writer.is_open:
+            self.writer.close()
+        if os.path.exists(self.writer._save_dir/Path(process.save_path)):
+            self.logger.debug(f"opening file: {self.writer._save_dir/Path(process.save_path)}")
+            prev_params = self.writer.import_file(process.save_path)
+            if not process.issameparams(prev_params):
+                self.logger.warning("Configured process inputs different from currently selected save file. Are you sure you want to continue?")
+        else:
+            self.writer.new_file(process.save_path, process.to_meta())
         self.logger.debug(f"Process Configured. Params: {process}")
 
-    def start_run(self, run_id: str, meta: DischargeMeta) -> RunData:
+    def start_run(self, meta: DischargeMeta):
         if self.current_run is not None:
             self.logger.warning("start_run called while run active - overwriting")
 
@@ -126,6 +137,7 @@ class Controller:
             meta=meta,
             t_start = time.perf_counter()
         )
+        run.meta.index = self.writer.next_discharge_index()
         self.current_run = run
 
         nidaq = self.registry.get('nidaq')
@@ -145,9 +157,44 @@ class Controller:
         if scope:
             scope.series = run.waveform
 
+    def end_run(self, run_id, discharge_result: DischargeComplete | DischargeSkipped) -> RunData:
         completed = self.current_run
         self.current_run = None
-        self.logger.info(f"Run ended: {completed.meta.index}")
+        nidaq = self.registry.get('nidaq')
+        if nidaq:
+            nidaq.pressure.series = PressureTimeseries()
+            nidaq.mfc.series = MFCTimeseries()
+
+        dmm = self.registry.get("dmm")
+        if dmm:
+            dmm.series = None
+
+        psu = self.registry.get("pwr")
+        if psu:
+            psu.series = None
+
+        scope = self.registry.get("osc")
+        if scope:
+            scope.series = None
+
+        self.logger.info(f"Run ended: {run_id}")
+
+        completed.meta.trigger_source = discharge_result.source
+        if isinstance(discharge_result, DischargeSkipped):
+            return
+        
+        discharge_data = DischargeData(
+            gap_cm = completed.meta.gap_cm,
+            pressure_kjl = discharge_result.pressure_kjl,
+            pressure_mks = discharge_result.pressure_mks,
+            voltage_pwr = discharge_result.voltage,
+            current_pwr = discharge_result.current,
+            voltage_dmm = completed.dmm.samples_voltage[-1][1],
+            source = discharge_result.source
+            )
+        discharge_data.calculate_errors()
+        completed.critical_data = discharge_data
+
         return completed
     
     def stamp_trigger(self, source: str):
@@ -155,8 +202,8 @@ class Controller:
             self.logger.warning("stamp_trigger called but no run active")
             return
         t = time.perf_counter()
-        run = self.current_run
-        for series in (run.pressure, run.mfc, run.dmm. run.power_supply, run.waveform):
+        run_var = self.current_run
+        for series in (run_var.pressure, run_var.mfc, run_var.dmm, run_var.power_supply, run_var.waveform):
             if series is not None:
                 series.t_trigger = t
                 series.trigger_source = source

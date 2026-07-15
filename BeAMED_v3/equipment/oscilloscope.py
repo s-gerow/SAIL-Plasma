@@ -38,7 +38,8 @@ class SiglentSDS1204XE(VisaEquipment):
         """
         super().__init__(name, manager, resource_id, abort_event=abort_event)
         self.triggered = False
-        self.series: Waveform() | None = None
+        self.series: Waveform | None = None
+        self._lock = threading.Lock()
 
     def configure(self, channel: str = "C1", vdiv: float = 1.0, tdiv: float=1e-3, trigger_level:float=0.5, trigger_slope:Literal["POS", "NEG", "WINDOW"] ="POS"):
         """
@@ -64,16 +65,17 @@ class SiglentSDS1204XE(VisaEquipment):
         """
         # Turn of character headers. Changes command responses from TIME_DIV 1e-3S to 1e-3
         # This can also be set to TDIV 1e-3 but we dont want any characters in these responses, just numbers.
-        self.write("CHDR OFF")
-        self.write(f"{channel}:ATTN {1}")
-        self.write(f"{channel}:OFST {0}")
-        self.write(f"{channel}:VDIV {vdiv}")
-        self.write(f"TDIV {tdiv}")
-        self.write(f"HPOS {0}")
-        self.write(f"TRMD NORM")
-        self.write(f"{channel}:TRSL {trigger_slope}")
-        self.write(f"TRSE EDGE,SR,{channel},HT,TI,HV,{1E-7}")
-        self.write(f"{channel}:TRLV {trigger_level}")
+        with self._lock:
+            self.write("CHDR OFF")
+            self.write(f"{channel}:ATTN {1}")
+            self.write(f"{channel}:OFST {0}")
+            self.write(f"{channel}:VDIV {vdiv}")
+            self.write(f"TDIV {tdiv}")
+            self.write(f"HPOS {0}")
+            self.write(f"TRMD NORM")
+            self.write(f"{channel}:TRSL {trigger_slope}")
+            self.write(f"TRSE EDGE,SR,{channel},HT,TI,HV,{1E-7}")
+            self.write(f"{channel}:TRLV {trigger_level}")
 
     def arm_trigger(self, trigger_event: threading.Event | None = None):
         """
@@ -89,10 +91,7 @@ class SiglentSDS1204XE(VisaEquipment):
                              "trigger_event": trigger_event
                          })
         t.start()
-        t.join()
-        if self.triggered:
-            waveform = self.capture()
-            return waveform
+
 
 
     def _wait_for_trigger(self, poll_interval: float = 0.05,
@@ -102,6 +101,7 @@ class SiglentSDS1204XE(VisaEquipment):
         Returns True if triggered, False if stopped/aborted.
         This runs on its own thread — never call from GUI thread.
         """
+        error_count = 0
         abort_event = self._abort
         while True:
             if abort_event and abort_event.is_set():
@@ -110,7 +110,18 @@ class SiglentSDS1204XE(VisaEquipment):
             if stop_event and stop_event.is_set():
                 self.triggered = False
                 return False
-            status = self.query("SAST?")
+            try:
+                with self._lock:
+                    status = self.query("SAST?")
+            except pyvisa.VisaIOError as e:
+                error_count += 1
+                self.logger.warning(f"VISA IO error {error_count}/3. skipping read")
+                
+                if error_count >= 3:
+                    self.logger.warning(f"VISA IO error 3/3. Aborting Trial")
+                    abort_event.set()
+                    return False
+                continue
             if "Stop" in status:
                 self.triggered = True
                 if trigger_event:
@@ -120,21 +131,22 @@ class SiglentSDS1204XE(VisaEquipment):
 
     def capture(self, channel: str = "C1") -> Waveform:
         """Fetch waveform data from scope after trigger. Returns structured result."""
-        self.write("CHDR OFF")
-        self.write(f"DATASOURCE {channel}")
-        self.write("DATA:ENCDG SRI")
-        self.write("DATA:WIDTH 2")
-        self.write("DATA:START 0")
-        self.write("DATA:STOP 1000")
+        with self._lock:
+            self.write("CHDR OFF")
+            self.write(f"DATASOURCE {channel}")
+            self.write("DATA:ENCDG SRI")
+            self.write("DATA:WIDTH 2")
+            self.write("DATA:START 0")
+            self.write("DATA:STOP 1000")
 
-        sample_rate = float(self.query("SARA?"))
-        time_interval = 1 / sample_rate
-        tdiv  = float(self.query("TDIV?"))
-        offset = float(self.query(f"{channel}:OFST?"))
-        vdiv  = float(self.query(f"{channel}:VDIV?"))
+            sample_rate = float(self.query("SARA?"))
+            time_interval = 1 / sample_rate
+            tdiv  = float(self.query("TDIV?"))
+            offset = float(self.query(f"{channel}:OFST?"))
+            vdiv  = float(self.query(f"{channel}:VDIV?"))
 
-        self.write(f"{channel}:WF? DAT2")
-        raw = self.read_raw()[16:-2]
+            self.write(f"{channel}:WF? DAT2")
+            raw = self.read_raw()[16:-2]
         self.logger.debug(f"Response: {len(raw)} bytes")
         codes = np.frombuffer(raw, dtype=np.uint8).astype(np.int16)
         voltage = np.where(codes < 127,
@@ -153,13 +165,17 @@ class SiglentSDS1204XE(VisaEquipment):
         return wave
 
     def stop(self):
-        self.write("STOP")
+        with self._lock:
+            self.write("STOP")
 
     def read_pkpk(self) -> float:
-        return self.query("C1:PARAMETER_VALUE? PKPK")
+        with self._lock:
+            result = self.query("C1:PARAMETER_VALUE? PKPK")
+        return result
 
     def getStatus(self) -> dict:
         base = super().get_status()
         if self._connected:
-            base["trigger_status"] = self.query("SAST?").strip()
+            with self._lock:
+                base["trigger_status"] = self.query("SAST?").strip()
         return base

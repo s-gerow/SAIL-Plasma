@@ -51,6 +51,7 @@ class ExperimentProcess:
             return
         self._abort.clear()
         self._run(params)
+        #self.writer.new_file(params.save_path, params.to_meta())
         self.logger.info(f"Experimert series started from {params.start_pressure} Torr to {params.stop_pressure} Torr")
 
     def stop(self):
@@ -88,14 +89,17 @@ class ExperimentProcess:
         scope = self.controller.get("osc")
         dmm = self.controller.get("dmm")
 
-
-
         # configure the oscilloscope
         self.logger.debug("configuring oscilloscope")
         #scope.configure()
         self.logger.debug("configuring digital multimeter")
         #dmm.configure()
         self.logger.debug("configuring power supply")
+
+        if not self.writer.is_open:
+            self.logger.error("Writer not open - experiment canot save data")
+            self.controller.queue.put(ExperimentFailed(reason="No file open for saving"))
+            return
 
         for i, pressure in enumerate(params.pressures):
             if self._abort.is_set() or self.controller.event_abortAll.is_set():
@@ -112,6 +116,7 @@ class ExperimentProcess:
             self.oscope_trigger.clear()
 
             params.index = i
+            
 
             meta = DischargeMeta(index=i,
                                  gap_cm=params.gap_cm,
@@ -121,15 +126,26 @@ class ExperimentProcess:
                                  cathode_shape=params.cathode_shape,
                                  anode_shape=params.anode_shape
                                  )
-            self.controller.start_run(f"discharge_{i+1:03d}", meta)
+            self.controller.start_run(meta)
 
             self.logger.info(f"Discharge {i+1}/{params.n_discharges} - target pressure {pressure:.3f} Torr")
-            discharge_result = self._run_discharge(pressure, params, nidaq)
+            discharge_result = self._run_discharge(pressure, params, nidaq, pwr)
 
             self._wait_for_thread_close(nidaq, dmm, scope, pwr)
 
+            if isinstance(discharge_result, DischargeSkipped):
+                self.logger.info("Venting chamber to atmosphere")
+                self._wait_for_atmosphere(nidaq) #, timeout=300)
+                continue
+
+            if isinstance(discharge_result, DischargeComplete):
+                run_data = self.controller.end_run(f"discharge_{i+1:03d}", discharge_result)
+                self.writer.save_discharge(run_data)
+
+            self.controller.queue.put(discharge_result)
             self.logger.info("Venting chamber to atmosphere")
             self._wait_for_atmosphere(nidaq) #, timeout=300)
+
         self.controller.queue.put(
             ExperimentComplete(
                 n_discharges=len(params.pressures),
@@ -137,7 +153,7 @@ class ExperimentProcess:
             )
         )
 
-    def _run_discharge(self, pressure, params: ExperimentParams, nidaq) -> DischargeComplete | DischargeSkipped:
+    def _run_discharge(self, pressure, params: ExperimentParams, nidaq, power) -> DischargeComplete | DischargeSkipped:
         # starting at atmosphere
         MIN_PRESSURE = 1 # Torr
         try:
@@ -158,12 +174,18 @@ class ExperimentProcess:
             self.controller.run("nidaq_ground_feedthrough", "nidaq", "start_feedthrough", dir_ = True, stop_event = self.feedthrough_ground_event)
             # wait for dmm trigger, then wait for some time to allow feedthrough to stop
             while not self.feedthrough_ground_event.is_set():
+                if self._abort.is_set():
+                    self.logger.warning("Abort event detected. stopping discharge")
+                    return DischargeSkipped(params.index, "aborted")
                 time.sleep(0.01)
             time.sleep(0.5)
             # start feedthrough set to params distance with set trigger
             self.controller.run("nidaq_set_feedthrough", "nidaq", "step_feedthrough_cm", dir_ = False, cm = params.gap_cm, trigger_event = self.feedthrough_gap_set_event)
             # wait for feedthrough trigger
             while not self.feedthrough_gap_set_event.is_set():
+                if self._abort.is_set():
+                    self.logger.warning("Abort event detected. stopping discharge")
+                    return DischargeSkipped(params.index, "aborted")
                 time.sleep(0.01)
             self.controller.run("nidaq_deactivate_do_feedthrough", "nidaq", "_disconnect_feedthrough")
             self.controller.run("nidaq_activate_do_valves", "nidaq", "_connect_valves")
@@ -175,16 +197,24 @@ class ExperimentProcess:
             self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition", stop_event = self.pressure_min_event, target_=MIN_PRESSURE, target_trigger='falling')
             # wait for the event trigger from pressure thread
             while not self.pressure_min_event.is_set():
+                if self._abort.is_set():
+                    self.logger.warning("Abort event detected. stopping discharge")
+                    return DischargeSkipped(params.index, "aborted")
                 time.sleep(0.01)
             # start reading again with no trigger
             self.logger.info(f"Chamber reached minimum pressure: {MIN_PRESSURE} Torr")
             time.sleep(0.5)
             self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition")
+            if pressure > 1.8:
+                self.controller.run("nidaq_open_secondary_pump", 'nidaq', "open_valve", valve=1)
             # set PI controller to target pressure with event
             self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
             self.controller.run("nidaq_start_pi", 'nidaq', "start_PI", settled_event = self.pi_settled_event)
             # wait for settled event to trigger
             while not self.pi_settled_event.is_set():
+                if self._abort.is_set():
+                    self.logger.warning("Abort event detected. stopping discharge")
+                    return DischargeSkipped(params.index, "aborted")
                 time.sleep(0.01)
             self.logger.info(f"Chamber pressure stable at {nidaq.pressure.latest[1]} Torr")
             # set dmm in voltage mode
@@ -202,30 +232,37 @@ class ExperimentProcess:
                                 stop_event = self.oscope_trigger)
             # wait for power supply or oscope trigger.
             while not self.oscope_trigger.is_set() and not self.power_trigger.is_set():
+                if self._abort.is_set():
+                    self.logger.warning("Abort event detected. stopping discharge")
+                    return DischargeSkipped(params.index, "aborted")
                 time.sleep(0.01)
-            
-            # record which event triggers first
+                # record which event triggers first
             if self.oscope_trigger.is_set():
                 trigger_str = "osc"
+                self.controller.get("osc").capture()
             elif self.power_trigger.is_set():
                 trigger_str = "pwr"
-            self.logger.info(f"Discharge detected. Source: {trigger_str}")
-            # check to ensure all threads have closed/check all triggers.
+            self.controller.stamp_trigger(trigger_str)
+
             self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
             self.controller.run("dmm_stop", "dmm", "stop_continuous_measure")
             
 
+            self.logger.info(f"Discharge detected. Source: {trigger_str}")
+            # check to ensure all threads have closed/check all triggers.
             
         except Exception as e:
             self.logger.warning(f"experiment run failed due to exception: {str(e)}")
             return DischargeSkipped(params.index, str(e))
-        return DischargeComplete(params.index, nidaq.pressure.latest[1], self.controller.get("pwr").latest[0], self.controller.get("pwr").latest[1], trigger_str)
+        return DischargeComplete(params.index, nidaq.pressure.latest[1], nidaq.pressure.latest[0], self.controller.get("pwr").latest[0], self.controller.get("pwr").latest[1], trigger_str)
 
     def _wait_for_thread_close(self, nidaq: NIDAQEquipment, dmm: KeithleyDMM6500, osc: SiglentSDS1204XE, pwr: Keithley2260B_800_1):
         if nidaq.pressure._running:
             self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
+        if nidaq.mfc._running:
+            self.controller.run("nidaq_pi_stop", "nidaq", "stop_PI")
         if dmm._running:
-            self.controller.run("dmm_stop", "dmm", "stop_continuous_measurement")
+            self.controller.run("dmm_stop", "dmm", "stop_continuous_measure")
         if pwr._output:
             self.controller.run("pwr_stop", "pwr", "stop")
         if not osc.triggered:

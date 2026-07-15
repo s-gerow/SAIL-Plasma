@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog as fd
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import logging
@@ -162,6 +163,7 @@ class ExperimentInputFrame(tk.LabelFrame):
 
 
     def _configure_series(self):
+        path = self.exp_controller._output_frame.path_var.get()
         params = ExperimentParams(
             start_pressure = self._input_vars["pressure_min"].get(),
             stop_pressure = self._input_vars["pressure_max"].get(),
@@ -176,8 +178,12 @@ class ExperimentInputFrame(tk.LabelFrame):
             anode_material = self._input_vars["anode_mat"].get(),
             cathode_shape = "Large Plate",
             anode_shape="Small Plate",
-            notes = ""
+            notes = "" 
         )
+        if not path:
+            path = f"beamed_{params.gas_species}_{params.cathode_material.replace(' ','_')}_{params.cathode_shape.replace(' ', '_')}_{params.gap_cm*10}mm.h5"
+        params.save_path = path
+
         self.exp_controller.configure_process(params)
 
         
@@ -205,5 +211,13 @@ class ExperimentOutputFrame(tk.LabelFrame):
             self._output_vars[var] = tk.DoubleVar(value=0.0)
             tk.Label(output_col, text=name).grid(row=i, column=0)
             ValueLabel(output_col, text=f"{self._output_vars[var].get():.3f}").grid(row=i, column=1)
+        self.path_var = tk.StringVar()
+        tk.Entry(output_col, textvariable=self.path_var, state="readonly").grid(row = len(self._output_names), column=0)
+        tk.Button(output_col, command=self._update_path, text="Choose File").grid(row=len(self._output_names), column=1)
+
+    def _update_path(self):
+        path = fd.asksaveasfilename()
+        if path:
+            self.path_var.set(path)
 
 

@@ -4,6 +4,8 @@ import logging
 import numpy as np
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration, AcquisitionType
+from nidaqmx.stream_readers import AnalogMultiChannelReader
+import nidaqmx.constants
 from typing import Literal
 
 from datatypes import PressureTimeseries, MFCTimeseries
@@ -177,11 +179,15 @@ class subsystemPressure:
             self.logger.warning("Pressure acquisition thread already runnning")
             return
         task = self._parent.tasks["ai_continuous"]
+
+        task.in_stream.input_buf_size = 100000
+
         task.timing.cfg_samp_clk_timing(rate=sample_rate,
                                         sample_mode=AcquisitionType.CONTINUOUS,
-                                        samps_per_chan=1000
+                                        samps_per_chan=10000
                                         )
         self._running = True
+        self._sample_rate = sample_rate
         self._thread = threading.Thread(target=self._acquire,
                                         name="pressure_acquisition",
                                         daemon=True,
@@ -198,37 +204,54 @@ class subsystemPressure:
         self._running = False
         if self._thread:
             self._thread.join(timeout=2)
+        task = self._parent.tasks['ai_continuous']
+        task.stop()
         self.logger.info("Pressure acquisition stopped")
     
     def _acquire(self, stop_event: threading.Event | None, target_: float | None, target_trigger: Literal['rising', 'falling']):
         task = self._parent.tasks["ai_continuous"]
+
+        n_channels = 3
+        chunk_size = 100
+        buffer = np.empty((n_channels, chunk_size), dtype=np.float64)
+        reader = AnalogMultiChannelReader(task.in_stream)
+
         task.start()
         settle_time_start = None
-        t_last = time.perf_counter()
+
+        self._sample_index = 0
+
         while self._running:
             if self._parent._abort_event.is_set():
                 break
             try:
-                data = task.read(
-                    number_of_samples_per_channel=100,
+                n=chunk_size
+                reader.read_many_sample(
+                    buffer,
+                    number_of_samples_per_channel=n,
                     timeout=1
                 )
-                t=time.perf_counter()
-                dt = t- t_last
-                t_last = t
-                kjl = 10**(np.array(data[0])-5)
-                mks = (np.array(data[1])/10)*(self.pressure_max-self.pressure_min)+self.pressure_min
-                mfc = self._parent.mfc.volts2sccm(np.array(data[2]))
-                data = (kjl, mks, mfc)
+
+                dt = 1.0 / self._sample_rate
+                t_end = time.perf_counter()
+                t0 = t_end - n*dt
+                times= (t0 + (self._sample_index + np.arange(n)) * dt)
+                
+                self._sample_index += n
+
+                kjl = 10**(buffer[0, :n] - 5)
+                mks = (buffer[1, :n]/10)*(self.pressure_max-self.pressure_min)+self.pressure_min
+                mfc = self._parent.mfc.volts2sccm(buffer[2, :n])
+            
                 with self._lock:
                     self.series.samples_kjl.extend(
-                        [(t+i/1000, v) for i, v in enumerate(data[0])]
+                       zip(times, kjl)
                     )
                     self.series.samples_mks.extend(
-                        [(t+i/1000, v) for i, v in enumerate(data[1])]
+                        zip(times, mks)
                     )
                     self._parent.mfc.series.samples_readback.extend(
-                        [(t+i/1000, v) for i, v in enumerate(data[2])]
+                        zip(times, mfc)
                     )
                 if target_:
                     match target_trigger:
@@ -255,7 +278,7 @@ class subsystemPressure:
                                     self._parent.mfc._settled_event.set()
                             else:
                                 settle_time_start = time.perf_counter()
-                    output = self._parent.mfc.PI(mks[-1],dt)
+                    output = self._parent.mfc.PI(mks[-1], n*dt)
                     # self.logger.debug(f"calculated set point: {output}")
                     self._parent.mfc.set_flow(output)
                 
@@ -268,8 +291,8 @@ class subsystemPressure:
     @property
     def latest(self) -> tuple[float, float]:
         with self._lock:
-            p_kjl = self.series.samples_kjl[-1][1] if self.series.samples_kjl else 0.0
-            p_mks = self.series.samples_mks[-1][1] if self.series.samples_mks else 0.0
+            p_kjl = self.series.samples_kjl[-1][1] if self.series and self.series.samples_kjl else 0.0
+            p_mks = self.series.samples_mks[-1][1] if self.series and self.series.samples_mks else 0.0
         return p_kjl, p_mks
 
     def clear_buffer(self):
@@ -378,8 +401,8 @@ class subsystemMFC:
     @property
     def latest(self) -> tuple[float, float]:
         with self._lock:
-            setpoints = self.series.samples_setpoint[-1][1] if self.series.samples_setpoint else 0.0
-            readouts = self.series.samples_readback[-1][1] if self.series.samples_readback else 0.0
+            setpoints = self.series.samples_setpoint[-1][1] if self.series and self.series.samples_setpoint else 0.0
+            readouts = self.series.samples_readback[-1][1] if self.series and self.series.samples_readback else 0.0
         return setpoints, readouts
 
 class subsystemValve:

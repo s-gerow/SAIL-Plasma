@@ -238,7 +238,8 @@ class BeAMEDWindow(tk.Tk):
                     frame.handle_result(result)
                 else:
                     self.logger.warning(f"Unhandled action result: {result.action}")
-        elif isinstance(result, ExperimentComplete)
+        # elif isinstance(result, ExperimentComplete):
+        #     if result.
         else:
             self.logger.warning(f"Unkown result type on queue: {type(result)}")
 

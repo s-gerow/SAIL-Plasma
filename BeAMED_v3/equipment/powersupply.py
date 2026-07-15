@@ -141,9 +141,18 @@ class Keithley2260B_800_1(VisaEquipment):
                     self.series.samples_current.append((t, current))
                 if current > 0:
                     trigger_event.set()
+                    self._output = False
+                    with self._lock:
+                        self.write("OUTP:STAT OFF")
+                    self.logger.warning("HIGH VOLTAGE OFF")
+                    return
                 if stop_event.is_set() or self._abort.is_set():
                     self.logger.warning("Stop Event or Abort Event is called. Stopping sweep")
-                    self.stop_output()
+                    self._output = False
+                    with self._lock:
+                        self.write("OUTP:STAT OFF")
+                    self.logger.warning("HIGH VOLTAGE OFF")
+                    return
                 time.sleep(3)
             except RuntimeError:
                 break
@@ -162,6 +171,6 @@ class Keithley2260B_800_1(VisaEquipment):
     @property
     def latest(self) -> tuple[float, float]:
         if self._connected:
-            volt = self.series.samples_voltage[-1][1] if self.series.samples_voltage else 0.0
-            curr = self.series.samples_current[-1][1] if self.series.samples_current else 0.0
+            volt = self.series.samples_voltage[-1][1] if self.series and self.series.samples_voltage else 0.0
+            curr = self.series.samples_current[-1][1] if self.series and self.series.samples_current else 0.0
         return volt, curr

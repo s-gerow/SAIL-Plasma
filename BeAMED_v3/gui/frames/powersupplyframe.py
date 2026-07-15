@@ -3,6 +3,7 @@ from tkinter import ttk
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import logging
+import time
 
 from gui.frames.baseframe import BaseFrame
 from gui.frames.styles import EnableButton, HeaderLabel, ValueDisplay
@@ -134,7 +135,7 @@ class PowerFrame(BaseFrame):
             self._enable = False
         if result.action == "pwr_voltage_sweep":
             self._output = True
-            self._poll()
+            self.after(5000, self._poll)
         else:
             self.logger.warning(f"Unhandled pwr result: {result.action}")
         

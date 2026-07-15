@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import numpy as np
 from datetime import datetime
+from pathlib import Path
 
 
 # ── Controller queue message types ────────────────────────────────────────────
@@ -70,10 +71,6 @@ class DischargeMeta:
     date: str = field(
         default_factory=lambda: datetime.now().isoformat()
     )
-    voltage_cr: float = 0.0
-    current_cr: float = 0.0
-    pressure_cr_mks: float = 0.0
-    pressure_cr_kjl: float = 0.0
     trigger_source: str = ""
     notes: str = ""
 
@@ -96,6 +93,7 @@ class ExperimentParams:
     target_pressure: float
     pi_timeout: float = 120
     index: int | None = None
+    save_path: Path = None
 
     gas_species: str = ""
     cathode_material: str = ""
@@ -123,14 +121,64 @@ class ExperimentParams:
             anode_shape=self.anode_shape,
             notes=self.notes
         )
+    
+    def issameparams(self, other_params: ExperimentMeta):
+        if self.gas_species != other_params.gas_species:
+            return False
+        elif self.gap_cm != other_params.gap_cm:
+            return False
+        elif self.cathode_material != other_params.cathode_material:
+            return False
+        elif self.anode_material != other_params.anode_material:
+            return False
+        elif self.cathode_shape != other_params.cathode_shape:
+            return False
+        elif self.anode_shape != other_params.anode_shape:
+            return False
+        else:
+            return True
 
 @dataclass
 class DischargeComplete:
     index: int
-    pressure: float
+    pressure_mks: float
+    pressure_kjl: float
     voltage: float
     current: float
     source: str
+
+@dataclass
+class DischargeData:
+    gap_cm: float = None
+    pressure_mks: float = None
+    pressure_kjl: float = None
+    voltage_pwr: float = None
+    current_pwr: float = None
+    voltage_dmm: float = None
+    source: str = None
+
+    pressure_kjl_err: float = None
+    pressure_mks_err: float = None
+    voltage_pwr_err: float = None
+    current_pwr_err: float = None
+    voltage_dmm_err: float = None
+    gap_err: float = None
+    pd_kjl_err: float = None
+    pd_mks_err: float = None
+
+    def calculate_errors(self):
+        #~21 C, 40-50% humidity
+        self.pressure_kjl_err = self.pressure_kjl * 0.1
+        self.pressure_mks_err = self.pressure_mks*0.005 if self.pressure_mks < 1 else self.pressure_mks*0.0025
+        self.voltage_pwr_err = self.voltage_pwr*0.001 + 0.400 #uncertainty in measured voltage: 0.1% + 400mV
+        self.current_pwr_err = self.current_pwr*0.001 + 0.002 #uncertainty in measured current: 0.1% + 2mA
+        #self.voltage_dmm_err = self.voltage_dmm*0.000001 # old uncertainty
+        self.voltage_dmm_err = (0.00004 * self.voltage_dmm) + (0.000006 * 1000) + (0.00002 * max(0, self.voltage_dmm-500))
+        self.gap_err = 0.05
+        self.pd_kjl_err = (self.pressure_kjl*self.gap_cm)*((self.pressure_kjl_err/self.pressure_kjl)+(0.05/self.gap_err)) #kurt J lesker d(pd)
+        self.pd_mks_err = (self.pressure_mks*self.gap_cm)*((self.pressure_mks_err/self.pressure_mks)+(0.05/self.gap_err)) #MKS d(pd)
+
+
 
 @dataclass
 class DischargeSkipped:
@@ -151,10 +199,10 @@ class ExperimentComplete:
 @dataclass
 class Waveform:
     """Processed waveform data captured from the oscilloscope at discharge."""
-    voltage: np.ndarray
-    time: np.ndarray
-    dy: float
-    t_discharge: float
+    voltage: np.ndarray | None = None
+    time: np.ndarray | None = None
+    dy: float | None = None
+    t_discharge: float | None = None
 
 @dataclass
 class PowerSeries:
@@ -188,6 +236,7 @@ class MFCTimeseries:
 @dataclass
 class RunData:
     meta: DischargeMeta
+    critical_data: DischargeData = field(default_factory=DischargeData)
     pressure: PressureTimeseries = field(default_factory=PressureTimeseries) 
     mfc: MFCTimeseries = field(default_factory=MFCTimeseries)
     dmm: DMMSeries = field(default_factory=DMMSeries)
