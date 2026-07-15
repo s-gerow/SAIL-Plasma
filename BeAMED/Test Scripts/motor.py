@@ -20,6 +20,8 @@ matplotlib.use('TkAgg')
 #Initialize Visa Resource Manager
 # rm = pyvisa.ResourceManager()
 # DMM = rm.open_resource('USB0::0x05E6::0x6500::04386498::INSTR')
+#rm = pyvisa.ResourceManager()
+#DMM = rm.open_resource('USB0::0x05E6::0x6500::04386498::INSTR')
 
 root = tk.Tk()
 root.title = ('On/Off Switch')
@@ -61,32 +63,88 @@ on_button = Button(root, image = on, bd = 0,
 on_button.pack(pady = 50)
  
 # def run():
-#     #run_bool=True
+#     run_bool = True
+#     target = 0.5
+#     DMM.write(':SENS:FUNC "CONT"')
+#     DMM.write('TRAC:FILL:MODE CONT,"defbuffer1"') #continuous fill
+
 #     with nidaqmx.Task() as do_task:
+        
+#         Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line1")
 #         Pull = do_task._do_channels.add_do_chan("NI_DAQ/port1/line2")
-#         Dir = do_task._do_channels.add_do_chan("NI_DAQ/port1/line3") #false = up, true =down
-#         #while run_bool:
-#         #do_task.write([True,True],auto_start=True,timeout=10) 
-#         #sleep(0.5)
-#         #do_task.write([True,False],auto_start=True,timeout=3)
-#         # sleep(0.000005)
-#         # for x in range(400):
-#         #     do_task.write([False,True],auto_start=True,timeout=10)
-#         #     sleep(.000005)
-#         #     do_task.write([True,True],auto_start=True,timeout=10)
-#         #     sleep(0.000005)
-#         do_task.write([True,True],auto_start=True,timeout=10)
-#         sleep(0.5)
-#         do_task.write([True,False],auto_start=True,timeout=10) 
-#         sleep(0.5)
-#         #do_task.write([True,False],auto_start=True,timeout=3)
-#         sleep(0.000005)
-#         for x in range(400):
-#             do_task.write([False,False],auto_start=True,timeout=10)
-#             sleep(.000005)
-#             do_task.write([True,False],auto_start=True,timeout=10)
-#             sleep(0.000005)
-#         do_task.write([False,False])
+
+#         # Change direction here: True (down) or False (up)
+#         direction = True  # Toggle this to reverse motor direction
+
+#         # Set DIR before stepping
+#         do_task.write([direction, False], auto_start=True)
+#         time.sleep(0.00001)  # ≥5 µs DIR setup time
+#         ohm = float(DMM.query(":READ?"))
+#         while ohm > 500:
+#             do_task.write([direction, True], auto_start=True)   # PUL HIGH
+#             time.sleep(0.000005)
+#             do_task.write([direction, False], auto_start=True)  # PUL LOW
+#             time.sleep(0.000005)
+#             print("Direction Down")
+#             ohm = float(DMM.query(":READ?"))
+#         #switch direction
+#         direction = False  # Toggle this to reverse motor direction
+#         do_task.write([direction, False], auto_start=True)
+#         time.sleep(0.00001)  # ≥5 µs DIR setup time
+#         for _ in np.arange(0,target*3200,1):
+#             do_task.write([direction, True], auto_start=True)   # PUL HIGH
+#             time.sleep(0.000005)
+#             do_task.write([direction, False], auto_start=True)  # PUL LOW
+#             time.sleep(0.000005)
+#             #print("Direction Up")
+#             ohm = float(DMM.query(":READ?"))
+#         do_task.close()
+#         DMM.close()
+#         rm.close()
+#         '''
+#         while run_bool:
+#             ohm = float(DMM.query(":READ?"))
+#             if ohm < 500: #Move down
+#                 DMM.close()
+#                 rm.close()
+#                 break
+#             else:       #Move down
+                
+#                 do_task.write([True,True],auto_start=True,timeout=10) 
+#                 sleep(0.000005)
+#                 do_task.write([True,True],auto_start=True,timeout=10) 
+#                 for x in range(3200):
+#                     do_task.write([True,False],auto_start=True,timeout=10)
+#                     sleep(.0000025)
+#                     do_task.write([False,False],auto_start=True,timeout=10)
+#                     sleep(0.0000025)
+#                     print("Direction Down")
+#                     ohm = float(DMM.query(":READ?"))
+#                     if ohm < 500: #Move up
+#                         sleep(0.5)
+#                         for x in range(400):
+#                             do_task.write([True,False],auto_start=True,timeout=10)
+#                             sleep(.0000025)
+#                             do_task.write([False,False],auto_start=True,timeout=10)
+#                             sleep(0.0000025)
+#                             print("Direction Up")
+                        
+#                         break
+# '''
+
+# def clean_exit():
+#     #runthread.stop()
+#     DMM.close()
+#     rm.close()  
+#     root.destroy()
+
+# root.protocol('WM_DELETE_WINDOW', clean_exit) 
+
+
+# runthread = Thread(target = run, daemon=True)         
+# # Execute Tkinter
+# runthread.start()
+# root.mainloop()
 
 def move(dir_state, steps, delay=0.000005):
     with nidaqmx.Task() as do_task:
@@ -103,12 +161,57 @@ def move(dir_state, steps, delay=0.000005):
             do_task.write([False, dir_state])  # falling edge
             time.sleep(delay)
 
-# Move down
-move(True, 400)
-time.sleep(0.5)
-
-# Move up
-move(False, 400)            
 
 
+rm = pyvisa.ResourceManager()
+Dmm = rm.open_resource('USB0::0x05E6::0x6500::04386498::0::INSTR')
+
+Dmm.write(':SENS:FUNC "CONT"')
+ohm = float(Dmm.query(":READ?"))
+
+do_task = nidaqmx.Task()
+do_task.do_channels.add_do_chan("NI_DAQ/port1/line2")  # PUL
+do_task.do_channels.add_do_chan("NI_DAQ/port1/line1")  # DIR
+
+target = 800#1684#0.5*3200 # distance in mm, we say there are 3200 steps in 1 mm
+for i in range(1):
+    print(f'starting {i}')
+    # Change direction here: True (down) or False (up)
+    dir_state = True  # Toggle this to reverse motor direction
+    delay = 0.000005
+    # Set direction (second bit)
+    do_task.write([False, dir_state],auto_start=True)
+    time.sleep(0.00005)  # allow DIR to settle before stepping
+    j = 0
+    while ohm > 500:
+        # Pulse step pin (first bit)
+        do_task.write([True, dir_state])   # rising edge on STEP
+        time.sleep(delay)
+        do_task.write([False, dir_state])  # falling edge
+        time.sleep(delay)
+        #print("Direction Down")
+        ohm = float(Dmm.query(":READ?"))
+        j+=1
+    #switch direction
+    print(f'contact: {j}steps taken. moving {target}cm')
+    dir_state = False  # Toggle this to reverse motor direction
+    do_task.write([False, dir_state],auto_start=True)
+    time.sleep(0.00005)  # allow DIR to settle before stepping
+    for _ in np.arange(0,target,1):
+        # Pulse step pin (first bit)
+        do_task.write([True, dir_state])   # rising edge on STEP
+        time.sleep(delay)
+        do_task.write([False, dir_state])  # falling edge
+        time.sleep(delay)
+        #print("Direction Up")
+        ohm = float(Dmm.query(":READ?"))
+    print("done")
+do_task.close()
+Dmm.close()
+# # Move down
+# move(True, 40)
+# time.sleep(0.5)
+
+# # Move up
+# move(False, 40)      
 

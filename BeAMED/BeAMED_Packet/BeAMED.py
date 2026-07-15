@@ -50,12 +50,17 @@ class Experiment():
         #the pressure range is for storing the np.linspace which is created to store the experiment series pressure values. This is iterated to adjust pressures for each test in a series
         #experiment run values is where the experimental data is internally saved before being converted to a dataframe and sent to csv
         
-        self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_MKS(Torr)', 'p_KJL(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p_MKS)', 'd(p_KJL)', 'd(d)', 'd(pd_KJL)', 'd(pd_MKS)']
+        self.ExperimentOutputHeader = ['Time', 'D_Y(Osc)', 'V_in', 'V(Volts)', 'Current (Amp)', 'p_MKS(Torr)', 'p_KJL(Torr)', 'p_Predict(Torr)', 'dis (cm)', 'd(V)', 'd(p_MKS)', 'd(p_KJL)', 'd(d)', 'd(pd_KJL)', 'd(pd_MKS)', 'dV(V)']
         self.experimentOutputDataFrame = pd.DataFrame(columns=self.ExperimentOutputHeader)
         self.pressure_range = None
         self.ExperimentRunValues = [[]] 
         self.SaveFileType = None
         
+        # pressure change data
+        self.pressure_at_pressure_set = tk.DoubleVar()
+        self.time_at_pressure_set = tk.DoubleVar()
+        self.DeltaP = tk.DoubleVar()
+        self.Detlat = tk.DoubleVar()
 
         #_________________Experiment Events_________________________________________#
             #Each of these events represent an important benchmark in the setup of the experiment. 
@@ -68,12 +73,14 @@ class Experiment():
         self.isTargetPressure = Event() #this is cleared at the beginning of the experiment trial and set when the setpressure fucntion is finished
         self.isFeedthroughset = Event() #this is cleared at the begining of the experiment trial and set when the feedthrough function finishes
         self.isExperimentStarted = Event() #when a new experimental trial is started this is set
+        self.isVoltageComplete = Event()
         self.isDischargeSaved = Event()
         self.isSaved = Event() #this is used to manage the experimental flow. Once a discharge is compelete, the system collects the data and saves it. Only then can a new test start.
         self.StopALL = Event()
 
         class experimentEvent(Event):
-            '''A custom Event class to store wether the experiment is triggered or not as well as store and output the relavent output data.'''
+            '''A custom Event class to store wether the experiment is triggered or not as well as store and output the relavent output data.
+            I never properly implemented this so its kind of depreciated at this point'''
             def __init__(self):
                 super().__init__()
                 self.pressure = ""
@@ -112,7 +119,7 @@ class Experiment():
         
         tk.Label(device_opt_frame, text = 'VISA Power').grid(row=0, column=0)
         self.pwr_cbox = ttk.Combobox(device_opt_frame, state = 'readonly', values = self.check_IO())
-        self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.pwr_cbox))
+        self.pwr_cbox.bind('<<ComboboxSelected>>', lambda event: self.update_combo_box(self.pwr_cbox)) #when you click on an option in the device boxes it will auto query the resource manager in order to update the list of available instruments
         self.pwr_cbox.grid(row =0, column=1)
         
         tk.Label(device_opt_frame, text = 'VISA DMM').grid(row=1,column=0)
@@ -290,7 +297,8 @@ class Experiment():
                  ).grid(column=1, row=7)
         self.gas_type = tk.StringVar(value = "N2")
         tk.Spinbox(experimentCondysFrame,
-                    textvariable=self.gas_type
+                    textvariable=self.gas_type,
+                    values=['N2','Ar','CO2']
                     ).grid(column=1, row=8)
 
         #configure button
@@ -366,6 +374,8 @@ class Experiment():
                         text = "Rough Pressure (Torr)").grid(row=4, column=0)
         tk.Label(experimentOutputFrame,
                         text = "Fine Pressure (Torr)").grid(row=5, column=0)
+        tk.Label(experimentOutputFrame,
+                        text = "Delta V (V)").grid(row = 6, column = 0)
         self.PS_voltage_var = tk.DoubleVar()
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
@@ -390,18 +400,24 @@ class Experiment():
                         to = 800,
                         textvariable=self.init_pressure
                         ).grid(row=3, column=1)
-        self.rough_pressure_var = tk.DoubleVar()
+        self.rough_pressure_var = tk.DoubleVar() #pressure from KJL sensor
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.rough_pressure_var
                         ).grid(row=4, column=1)
-        self.fine_pressure_var = tk.DoubleVar()
+        self.fine_pressure_var = tk.DoubleVar() #pressure from MKS sensor
         tk.Spinbox(experimentOutputFrame,
                         from_=0,
                         to = 800,
                         textvariable=self.fine_pressure_var
                         ).grid(row=5, column=1)
+        self.deltaV = tk.DoubleVar()
+        tk.Spinbox(experimentOutputFrame,
+                   from_= 0,
+                   to =800,
+                   textvariable=self.deltaV).grid(row=6, column=1)
+        #laura add voltage reading boxes here.
         
         tk.Label(experimentOutputFrame, text="Save to:").grid(column=2, row=0)
         self.SaveFile = tk.StringVar()
@@ -409,11 +425,14 @@ class Experiment():
 
 
         #_________________Create New Dropdown Options_________________________#
+        #this is for the menu at the top of the window "file", "dev tools", etc. I have not fully implemented this so a lot of them dont work or haven't been updated. Dont worry about this. Ill fix it in the next big upgrade
         self.parent.menubar.devMenu.add_command(label = "Test Trigger", command= self.test_trigger_experiment)
         self.parent.menubar.devMenu.add_command(label="Get Plot", command = self.osc_plot)
         self.parent.menubar.devMenu.add_command(label = "Zero Feedthrough", command = Thread(target = lambda: self.moveFeedthrough(float(self.electrode_pos_var.get())), daemon= True).start)
         self.parent.menubar.devMenu.add_command(label= "Read Pressure", command = Thread(target=lambda: self.read_pressure(), daemon=True).start)
         self.parent.menubar.devMenu.add_command(label = "Set Chamber Pressure", command = Thread(target = lambda: self.set_chamber_pressure(), daemon=True).start)
+        self.parent.menubar.devMenu.add_command(label= "Open MFC", command = lambda: print(self.run_MFC(5)))
+        self.parent.menubar.devMenu.add_command(label = "Close MFC", command = lambda: print(self.run_MFC(0)))
         self.parent.menubar.fileMenu.add_command(label ="Import Data", command=self.open_save_file)
         self.parent.menubar.fileMenu.add_command(label = "Save Data", command=self.save_to_current)
         self.exportMenu = tk.Menu(self.parent.menubar, tearoff=0)
@@ -449,12 +468,14 @@ class Experiment():
         self.parent.destroy()
 
     def poll_event(self, event, on_set_callback = None, poll_interval = 100, opt_id = "Event"):
+        thread = 'EVENT'
+        level = 'INFO'
         if event.is_set():
-            print(opt_id," is set! Running callback.")
+            self.log_message(thread, level ,f'{opt_id} is set! Running callback.')
             if on_set_callback:
                 on_set_callback()
             else:
-                print(f"Event {event} is set!")
+                self.log_message(thread, level, f"Event {event} is set!")
         else:
             #print("Event not set. Scheduling next poll.")
             self.parent.after(poll_interval, lambda: self.poll_event(event, on_set_callback, poll_interval, opt_id))
@@ -522,20 +543,26 @@ class Experiment():
         self.start_log()
         self.log_message(thread, level, f"Starting Experiment Series at pressures {self.pressure_range} Torr")
         def next_trial(trial, pressure_range):
+            print(f"threads still alive: {threading.active_count()}:")
+            for thread in threading.enumerate(): print(thread.name)
             if trial!=0:
                 self.log_message(thread, level, f"Experiment Trial {trial} Completed")
             trial+=1
             if trial <= len(pressure_range):
                 self.log_message(thread, level, f"Experiment Trial {trial} Starting")
+                self.log_message(thread, level, f"Setting Pressure target to {pressure_range[trial-1]}")
                 with self.tk_lock:
                     self.init_pressure.set(pressure_range[trial-1])
+                self.log_message(thread, level, "clearing previous trial variables")
                 self.isDischargeTriggered.clear()
                 self.isDischargeSaved.clear()
-                config = Thread(target=self.run_experiment_configuration())
+                config = Thread(target=self.run_experiment_configuration(), name= "Experiment Configuration")
                 self.isConfigComplete.clear()
+                self.log_message(thread,level, "Configuring Devices")
                 config.start()
                 config.join()
-                experiment = Thread(target=lambda:self.run_experiment(trial=trial))
+                self.log_message(thread, level, "starting experiment thread")
+                experiment = Thread(target=lambda:self.run_experiment(trial=trial),name="Experiment Main")
                 self.poll_event(event = self.isConfigComplete, on_set_callback=experiment.start, opt_id = "Configuration Event")
                 self.poll_event(event= self.isDischargeSaved, on_set_callback=lambda: next_trial(trial, pressure_range), opt_id="Discharge Event")
         if result:
@@ -547,11 +574,11 @@ class Experiment():
     def run_experiment_configuration(self):
         '''This is the first method which configures the experiment. It runs threads to zero the feedthrough, run the MFC and get to target pressure, and configure each device.
         This must be done before the experiment start button is clicked'''
-        thread = "MAIN"
+        thread = "EXP  MAIN"
         level = "INFO"
         
         #start the debug log and clear the oscilloscope plot for a new experiment
-
+        self.log_message(thread, level, "clearing experiment variables")
         self.axes.clear()
         self.triggered_var.set(0)
         #Reset the discharge Event and set the experiment event in order to signify the experiment has started to other threads
@@ -579,17 +606,18 @@ class Experiment():
             self.auto_range = "OFF"
         #initilize DMM then zero feedthrough
         
-        live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
+        self.log_message(thread, level, "starting pressure monitor script")
+        live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True, name="Pressure monitor")
         live_pressure.start()
 
         
         self.log_message(thread, level, "Setting Chamber Pressure")
-        pressure_set = Thread(target=lambda: self.set_chamber_pressure(), daemon=True)
+        pressure_set = Thread(target=lambda: self.set_chamber_pressure(), daemon=True, name="Pressure Set")
         pressure_set.start()
 
         self.Dmm = self.parent.devices[dmmName][0]
         target_position = float(self.electrode_pos_var.get())
-        setFeedthrough = Thread(target = lambda: self.moveFeedthrough(target_position), daemon= True)
+        setFeedthrough = Thread(target = lambda: self.moveFeedthrough(target_position), daemon= True, name = "Feedthrough Set")
 
 
         self.poll_event(event = self.isTargetPressure, on_set_callback= setFeedthrough.start, opt_id= "Pressure Event")
@@ -597,9 +625,9 @@ class Experiment():
         
         def continue_after_feedthrough_set():
             #Initilize threads to configure pyvisa devices
-            osccfg = Thread(target = lambda: self.configureOscilloscope(oscName))
-            dmmcfg = Thread(target = lambda: self.configureDMM(dmmName))
-            pwrcfg = Thread(target = lambda: self.configurePower(pwrName))
+            osccfg = Thread(target = lambda: self.configureOscilloscope(oscName), name= 'Oscilloscope Config')
+            dmmcfg = Thread(target = lambda: self.configureDMM(dmmName), name= 'Multimeter Config')
+            pwrcfg = Thread(target = lambda: self.configurePower(pwrName), name= 'Power Config')
             configurationThreads = [ osccfg, dmmcfg, pwrcfg]
             #Start configuration threads and wait for them to complete before continuing
             for thread in configurationThreads:
@@ -629,20 +657,24 @@ class Experiment():
         #pressure_lock = Lock() #this is to allow the live_pressure and MFcpressure to access the same variables without hanging the application
         self.log_message(thread, level, "Starting Continuous Pressure Reading")
         self.isTargetPressure.clear()
-        live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True)
+        live_pressure = Thread(target = lambda: self.read_pressure(),daemon=True, name="Pressure Monitor")
         live_pressure.start()
         #thread starts reading DMM
         self.log_message(thread, level, "Starting Continuos Voltage Reading")
-        live_dmm = Thread(target = lambda: self.readDmm(), daemon=True)
+        live_dmm = Thread(target = lambda: self.readDmm(), daemon=True, name="Multimeter Monitor")
         live_dmm.start()
 
         #thread monitors oscilliscope for trigger
-        live_osc = Thread(target = lambda: self.readOsc(), daemon = True)
+        live_osc = Thread(target = lambda: self.readOsc(), daemon = True, name="Oscilloscope Monitor")
         live_osc.start()
+        #laura start here
+        #add thread for voltage reading
+
+
         #thread increases voltage at set rate 0.5V/3s
         init_v = float(self.init_v_var.get())
         init_c = float(self.init_current_var.get())
-        v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c))
+        v_increase = Thread(target = lambda: self.increase_voltage(init_v, init_c), name= "Power Increase")
         v_increase.start()
         #print("trigger")
         #self.isDischargeTriggered.set()
@@ -727,11 +759,15 @@ class Experiment():
             with self.tk_lock:
                 self.parent.after(1, lambda: self.rough_pressure_var.set(old_true_pressure))
                 self.parent.after(1, lambda: self.fine_pressure_var.set(new_true_pressure))
-                if(self.isDischargeTriggered.is_set()):
-                    self.isDischargeTriggered.pressure = new_true_pressure
-                    self.log_message("Pressure", "INFO", f"Discharge Triggered at ({new_true_pressure}/{old_true_pressure}) Torr (MKS/KJL)")
-                    PressureSensors.task.close()
-                    return
+            if(self.isDischargeTriggered.is_set()):
+                self.isDischargeTriggered.pressure = new_true_pressure
+                with self.tk_lock:
+                    self.DeltaP.set(self.isDischargeTriggered.pressure - float(self.pressure_at_pressure_set.get()))
+                    self.Detlat.set(time.time() - self.time_at_pressure_set.get())
+                    print(f'delta t = {self.Detlat.get()}   delta p = {self.DeltaP.get()}')
+                self.log_message("Pressure", "INFO", f"Discharge Triggered at ({new_true_pressure}/{old_true_pressure}) Torr (MKS/KJL)")
+                PressureSensors.task.close()
+                return
             if(self.isTargetPressure.is_set()):
                 PressureSensors.task.close()
                 return
@@ -786,24 +822,35 @@ class Experiment():
             if(self.StopALL.is_set()):
                 self.log_message("OSC", "WARN", "Stop All Detected. Quitting...")
                 return
+        if not self.isDischargeSaved():
+            self.osc_plot()
         self.Osc.close_device()
         time.sleep(5)
 
     def set_chamber_pressure(self):
         daq_DO = DAQDevice("Valve Control")
+        thread = 'SET_P'
+        level = 'INFO'
+        with self.tk_lock:
+            gas = self.gas_type.get()
         try:
             daq_DO.task.do_channels.add_do_chan("NI_DAQ/port0/line1", name_to_assign_to_lines="PumpValve")
             daq_DO.task.do_channels.add_do_chan("NI_DAQ/port0/line0", name_to_assign_to_lines="VentValve")
             #get target pressure
             #set min pressure always 20mTorr
-            min_pressure = 2#0.020
+            min_pressure = 0.035
             #measure pressure drop until at min pressure
             with self.tk_lock:
                 true_pressure = float(self.rough_pressure_var.get())
                 target_pressure = float(self.init_pressure.get())
-            if true_pressure < 730:
+            if true_pressure < 700:
                 #check if pressure of chamber is below "near" atmosphere, if so, fill with air by venting
-                while true_pressure < 730:
+                # check if using CO2, in which case the lower valve needs to be manually opened, then wait 30 sec to open top vent.
+                if self.gas_type.get() == 'CO2':
+                    proceed = messagebox.askokcancel(title='CO2 Vent', message="Please open the lower vent valve and press okay.")
+                    if proceed:
+                        time.sleep(30)
+                while true_pressure < 650:
                     with self.daq_lock:
                         daq_DO.task.write([True, False], auto_start=True, timeout=3)
                         #open vent valve
@@ -811,26 +858,115 @@ class Experiment():
                         true_pressure = float(self.rough_pressure_var.get())
                     if(self.StopALL.is_set()):
                         return
+                self.log_message(thread, level, 'Reached Atmospheric Pressure')
                 with self.daq_lock:
                     daq_DO.task.write([False, False], auto_start=True, timeout=3)
                     #close both valves
+                if self.gas_type.get() == 'CO2':
+                    proceed = messagebox.askokcancel(title='CO2 Vent', message="Please close the lower vent valve and press okay.")
+                    if proceed:
+                        time.sleep(0.5)
+                
             #check if true pressure is greater than the target pressure, it will be
-            while true_pressure > target_pressure:
-                with self.daq_lock:
-                    daq_DO.task.write([False, True], auto_start=True, timeout=3)
-                    #open pump valve
-                with self.tk_lock:
-                    true_pressure = float(self.rough_pressure_var.get())
-                if(self.StopALL.is_set()):
+            match gas:
+                case 'N2':
+                    while true_pressure > target_pressure:
+                        #reduce to target pressure and stop
+                        with self.daq_lock:
+                            daq_DO.task.write([False, True], auto_start=True, timeout=3)
+                            #open pump valve
+                        with self.tk_lock:
+                            true_pressure = float(self.rough_pressure_var.get())
+                        if(self.StopALL.is_set()):
+                            return
+                    with self.daq_lock:
+                        daq_DO.task.write([False, False], auto_start=True, timeout=3)
+                        #close both valves
+                    self.isTargetPressure.set()
                     return
-            with self.daq_lock:
-                daq_DO.task.write([False, False], auto_start=True, timeout=3)
-                #close both valves
-            self.isTargetPressure.set()
+                case 'Ar':
+                    diffusionPumpOn = False
+                    while true_pressure > min_pressure:
+                        #reduce to minimum pressure
+                        with self.daq_lock:
+                            daq_DO.task.write([False, True], auto_start=True, timeout=3)
+                            #open pump valve to reduce pressure
+                        with self.tk_lock:
+                            true_pressure = float(self.rough_pressure_var.get())
+                        if true_pressure < .3 and diffusionPumpOn == False:
+                            proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 200mTorr, please plug in the diffusion pump to reach lower pressure")
+                            if proceed == False:
+                                print("stopping, refusal to turn on diffusion pump, cannot continue")
+                                self.StopALL.set()
+                            elif proceed:
+                                diffusionPumpOn = True
+                        if(self.StopALL.is_set()):
+                            return
+                    with self.daq_lock:
+                        daq_DO.task.write([False, False], auto_start=True, timeout=3)
+                    proceed = False
+                    while proceed == False:
+                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 40mTorr, please unplug the diffusion pump to continue, also open mfc input line")
+                    if proceed == True:
+                        diffusionPumpOn = False
+                    while true_pressure < target_pressure:
+                        #while we are below target argon pressure
+                        flowRate = self.run_MFC(5) #set MFC to maximum flow rate
+                        print(flowRate)
+                        time.sleep(0.1)
+                        with self.tk_lock:
+                            true_pressure = float(self.fine_pressure_var.get())
+                        if(self.StopALL.is_set()):
+                            return
+                    flowRate = self.run_MFC(0)    
+                    self.isTargetPressure.set()
+                    return 
+                case 'CO2':
+                    diffusionPumpOn = False
+                    while true_pressure > min_pressure:
+                        #reduce to minimum pressure
+                        with self.daq_lock:
+                            daq_DO.task.write([False, True], auto_start=True, timeout=3)
+                            #open pump valve to reduce pressure
+                        with self.tk_lock:
+                            true_pressure = float(self.rough_pressure_var.get())
+                        if true_pressure < .3 and diffusionPumpOn == False:
+                            proceed = messagebox.askokcancel(title='Diffusion Pump', message="Chamber has reached 200mTorr, please plug in the diffusion pump to reach lower pressure")
+                            if proceed == False:
+                                print("stopping, refusal to turn on diffusion pump, cannot continue")
+                                self.StopALL.set()
+                            elif proceed:
+                                diffusionPumpOn = True
+                        if(self.StopALL.is_set()):
+                            return
+                    with self.daq_lock:
+                        daq_DO.task.write([False, False], auto_start=True, timeout=3)
+                    proceed = False
+                    while proceed == False:
+                        proceed = messagebox.askokcancel(title="Diffusion Pump", message="Chamber has reached 40mTorr, please unplug the diffusion pump to continue")
+                    if proceed == True:
+                        diffusionPumpOn = False
+                    while true_pressure < target_pressure:
+                        #while we are below target argon pressure
+                        flowRate = self.run_MFC(5) #set MFC to maximum flow rate
+                        print(flowRate)
+                        time.sleep(0.1)
+                        with self.tk_lock:
+                            true_pressure = float(self.fine_pressure_var.get())
+                        if(self.StopALL.is_set()):
+                            return
+                    flowRate = self.run_MFC(0)    
+                    self.isTargetPressure.set()
+                    return 
         finally:
+            self.log_message(thread, level, 'Closing Thread')
             with self.daq_lock:
                 daq_DO.task.write([False, False], auto_start=True, timeout=3)
                 daq_DO.task.close()
+            with self.tk_lock:
+                true_pressure = float(self.fine_pressure_var.get())
+                self.pressure_at_pressure_set.set(true_pressure)
+                self.time_at_pressure_set.set(time.time())
         
     def moveFeedthrough(self, target):
         #x is electrode postion * 3200 revolutions
@@ -849,39 +985,42 @@ class Experiment():
         ohm = float(self.Dmm.resource.query(":READ?"))
         
         do_task = nidaqmx.Task()
-        do_task.do_channels.add_do_chan("NI_DAQ/port1/line1")  # DIR
         do_task.do_channels.add_do_chan("NI_DAQ/port1/line2")  # PUL
+        do_task.do_channels.add_do_chan("NI_DAQ/port1/line1")  # DIR
+        
 
         # Change direction here: True (down) or False (up)
-        direction = True  # Toggle this to reverse motor direction
-
-        # Set DIR before stepping
+        dir_state = True  # Toggle this to reverse motor direction
+        delay = 0.000005
+        # Set direction (second bit)
         with self.daq_lock:
-            do_task.write([direction, False], auto_start=True)
-        time.sleep(0.00001)  # ≥5 µs DIR setup time
+            do_task.write([False, dir_state],auto_start=True)
+        time.sleep(0.00005)  # allow DIR to settle before stepping
         while ohm > 500:
+            # Pulse step pin (first bit)
             with self.daq_lock:
-                do_task.write([direction, True], auto_start=True)   # PUL HIGH
-            time.sleep(0.000005)
+                do_task.write([True, dir_state])   # rising edge on STEP
+            time.sleep(delay)
             with self.daq_lock:
-                do_task.write([direction, False], auto_start=True)  # PUL LOW
-            time.sleep(0.000005)
+                do_task.write([False, dir_state])  # falling edge
+            time.sleep(delay)
             #print("Direction Down")
             ohm = float(self.Dmm.resource.query(":READ?"))
             if(self.StopALL.is_set()):
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
         #switch direction
-        direction = False  # Toggle this to reverse motor direction
+        dir_state = False  # Toggle this to reverse motor direction
         with self.daq_lock:
-            do_task.write([direction, False], auto_start=True)
-        time.sleep(0.00001)  # ≥5 µs DIR setup time
+            do_task.write([False, dir_state],auto_start=True)
+        time.sleep(0.00005)  # allow DIR to settle before stepping
         for _ in np.arange(0,target*3200,1):
+            # Pulse step pin (first bit)
             with self.daq_lock:
-                do_task.write([direction, True], auto_start=True)   # PUL HIGH
-            time.sleep(0.000005)
+                do_task.write([True, dir_state])   # rising edge on STEP
+            time.sleep(delay)
             with self.daq_lock:
-                do_task.write([direction, False], auto_start=True)  # PUL LOW
-            time.sleep(0.000005)
+                do_task.write([False, dir_state])  # falling edge
+            time.sleep(delay)
             #print("Direction Up")
             ohm = float(self.Dmm.resource.query(":READ?"))
             if(self.StopALL.is_set()):
@@ -894,30 +1033,63 @@ class Experiment():
     def increase_voltage(self, init_v: int, init_c: int):
         thread = "PWR"
         level = "INFO"
+        self.isVoltageComplete.clear()
         self.Pwr.open_device()
         self.Pwr.resource.write("OUTP:STAT:IMM ON")
         voltage_step = float(self.Pwr.options["Voltage Step Size"][0])
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {init_c}")
+        volt = 0
+        curr = 0
         while self.isDischargeTriggered.is_set() == False:
+            with self.tk_lock:
+                v0 = self.voltage_out_var.get()
             self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {init_v}")
             self.parent.after(1, lambda: self.voltage_out_var.set(self.Pwr.resource.query("SOUR:VOLT:LEV:IMM:AMPL?")))
             if(self.isDischargeTriggered.is_set()):
-                self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
-                self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
+                volt = self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")
+                curr = self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")
+                with self.tk_lock:
+                    self.PS_voltage_var.set(volt)
+                    self.PS_current_var.set(curr)
                 self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
                 self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:VOLT:DC?')} V")
             if(self.StopALL.is_set()):
                 self.log_message(thread, "WARN", "Stop All Detected. Quitting...")
                 return
             init_v += voltage_step
+            # curr = float(self.Pwr.resource.query('MEAS:SCAL:CURR:DC?'))
+            # if curr > 0:
+            #     self.isDischargeTriggered.set()
             time.sleep(3)
-        self.parent.after(1, self.PS_voltage_var.set(self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")))
-        self.parent.after(1, self.PS_current_var.set(self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")))
-        self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:CURR:DC?')} A")
-        self.log_message(thread, level, f"Discharge Triggered at {self.Pwr.resource.query('MEAS:SCAL:VOLT:DC?')} V")
+            # with self.tk_lock:
+            #     v1 = self.voltage_out_var.get()
+            #     self.deltaV.set(v0-v1)
+            # time.sleep(2)
+        volt = self.Pwr.resource.query("MEAS:SCAL:VOLT:DC?")
+        curr = self.Pwr.resource.query("MEAS:SCAL:CURR:DC?")
+        with self.tk_lock:
+            self.PS_voltage_var.set(volt)
+            self.PS_current_var.set(curr)
+        self.log_message(thread, level, f"Discharge Triggered at {curr} A")
+        self.log_message(thread, level, f"Discharge Triggered at {volt} V")
         self.Pwr.resource.write(f"SOUR:CURR:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write(f"SOUR:VOLT:LEV:IMM:AMPL {0}")
         self.Pwr.resource.write("OUTP:STAT:IMM OFF")
+        self.isVoltageComplete.set()
+    
+    def run_MFC(self, setpoint):
+        thread = "MFC"
+        level = "INFO"
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as ai_task:
+            with self.daq_lock:
+                ao_task.ao_channels.add_ao_voltage_chan("NI_DAQ/ao1", name_to_assign_to_channel="SetPointOutput", min_val=0, max_val=5)
+                ai_task.ai_channels.add_ai_voltage_chan("NI_DAQ/ai3", name_to_assign_to_channel="FlowSignalInput", min_val=0, max_val=10, terminal_config=nidaqmx.constants.TerminalConfiguration.DIFF)
+                ao_task.write(setpoint, auto_start = True, timeout=1)
+            time.sleep(1)
+            with self.daq_lock:
+                flowSignal_voltage = ai_task.read(10) #let flow rate stabilize before returning current flow rate
+            flowSignal_unfiltered_avg = np.median(flowSignal_voltage)
+        return flowSignal_unfiltered_avg
 
     def osc_plot(self):
         self.axes.clear()
@@ -943,22 +1115,24 @@ class Experiment():
         for i,byte in enumerate(wf):
             decimal.append(int.from_bytes(wf[i:i+1], byteorder=sys.byteorder))
         data = np.array(decimal)
-        time = np.flip(np.array([(tdiv*hgrid)-(idx*time_inter) for idx in range(0,data.size) ]))
+        timearr = np.flip(np.array([(tdiv*hgrid)-(idx*time_inter) for idx in range(0,data.size) ]))
 
         voltage_data = np.array([int(code)*(vdiv/25)-offset if int(code) < 127 else (int(code)-256)*(vdiv/25)-offset for code in data])
         
         self.DY = voltage_data[5:].max()
-        self.axes.plot(time, voltage_data)
+        self.axes.plot(timearr, voltage_data)
         self.axes.set_title('Discharge Plot')
         self.axes.set_ylabel('Voltage (V)')
         self.axes.set_xlabel('Time (s)')
 
         self.figure_canvas.draw()
+        while not self.isVoltageComplete.is_set():
+            time.sleep(0.5)
         self.save_experiment_to_local()
         self.isDischargeSaved.set()
 
     def save_experiment_to_local(self):
-        current_run = ["NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN", "NaN", "NaN"]
+        current_run = ["NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN","NaN", "NaN", "NaN", "NaN", "NaN", "NaN"]
         dt = datetime.now()
         dp_rough = float(self.rough_pressure_var.get())*0.1
         dp_fine = float(self.fine_pressure_var.get())*0.005 if float(self.fine_pressure_var.get()) < 1 else float(self.fine_pressure_var.get())*0.0025
@@ -977,7 +1151,8 @@ class Experiment():
         current_run[12] = 0.05 #uncertainty in distance +/- half a mm from ruler measurement
         current_run[13] = (float(self.rough_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_rough/float(self.rough_pressure_var.get()))+(0.05/float(self.electrode_pos_var.get()))) #kurt J lesker d(pd)
         current_run[14] = (float(self.fine_pressure_var.get())*float(self.electrode_pos_var.get()))*((dp_fine/float(self.fine_pressure_var.get()))+(0.05/float(self.electrode_pos_var.get()))) #MKS d(pd)
-        
+        current_run[15] = self.deltaV.get()
+
         self.ExperimentRunValues[0] = current_run
         newdataframe = pd.DataFrame(self.ExperimentRunValues, columns=self.ExperimentOutputHeader)
         self.experimentOutputDataFrame = pd.concat([newdataframe, self.experimentOutputDataFrame])
@@ -991,7 +1166,7 @@ class Experiment():
         print(self.experimentOutputDataFrame)
 
     def save_to_new(self):
-        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_BeAMED_Output.csv"
+        filename = f"{datetime.now().year}{datetime.now().month}{datetime.now().day}_{self.gas_type.get()}_{self.electrode_pos_var.get()}mm.csv"
         try:
             self.experimentOutputDataFrame.to_csv(filename, mode='x', index=False)
             self.SaveFileType = "CSV"

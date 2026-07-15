@@ -31,8 +31,16 @@ PyTHAGORA/CourseFlowchart.py
 
 #BeAMED Files
 *.log
+Figures/
 
 #other
 .vscode
 *.zip
 BeAMED/Test Scripts/Figures/*
+*.png
+*.svg
+
+*.gif
+
+#include tutorial images
+!PyTHAGORA/Images/*.png

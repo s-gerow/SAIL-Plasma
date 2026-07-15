@@ -95,7 +95,7 @@ class Oscilloscope_Figure_Maker(tk.Tk):
         osc = self.rm.open_resource(self.get_resource(self.device_cbox.get()))
 
         osc.write(self.osc_cmd_builder("ATTN", "Channel 1", [1]))
-        #osc.write(osc_cmd_builder("OFST", "Channel 1", [0]))
+        osc.write(self.osc_cmd_builder("OFST", "Channel 1", [0]))
         osc.write(self.osc_cmd_builder("VDIV", "Channel 1", [0.15]))
         osc.write(self.osc_cmd_builder("TDIV", "Channel 1", [5E-4]))
         osc.write(self.osc_cmd_builder("HPOS", "Channel 1", [0]))
@@ -108,7 +108,7 @@ class Oscilloscope_Figure_Maker(tk.Tk):
         osc.write('DATA:WIDTH 2')
         osc.write('DATA:START 0')
         osc.write('DATA: STOP 1000')
-
+        osc.write("CHDR OFF")
         
         sample_rate = osc.query("SARA?")
         time_inter = 1/float(sample_rate[0:-1])
