@@ -208,9 +208,12 @@ class ExperimentProcess:
             if pressure > 1.8:
                 self.controller.run("nidaq_open_secondary_pump", 'nidaq', "open_valve", valve=1)
             # set PI controller to target pressure with event
-            self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
-            self.controller.run("nidaq_start_pi", 'nidaq', "start_PI", settled_event = self.pi_settled_event)
+            if pressure < 1.8 or pressure > 3.5:
+                self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
+                self.controller.run("nidaq_start_pi", 'nidaq', "start_PI", settled_event = self.pi_settled_event)
             # wait for settled event to trigger
+            if pressure > 6.75:
+                self.controller.run("nidaq_close_valves", "nidaq", "close_valves")
             while not self.pi_settled_event.is_set():
                 if self._abort.is_set():
                     self.logger.warning("Abort event detected. stopping discharge")
