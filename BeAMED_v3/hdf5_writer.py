@@ -110,7 +110,7 @@ class HDF5Writer:
                 grp.require_group("dmm"),
                 {
                     "voltage_values": [v for _, v in run.dmm.samples_voltage],
-                    "voltage_times": [t for _,t in run.dmm.samples_voltage]
+                    "voltage_times": [t for t,_ in run.dmm.samples_voltage]
                 },
                 t_trigger=run.dmm.t_trigger
             )

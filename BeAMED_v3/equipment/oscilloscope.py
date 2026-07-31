@@ -126,6 +126,7 @@ class SiglentSDS1204XE(VisaEquipment):
                 self.triggered = True
                 if trigger_event:
                     trigger_event.set()
+                self.stop()
                 return True
             time.sleep(poll_interval)
 

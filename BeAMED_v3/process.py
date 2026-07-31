@@ -155,7 +155,7 @@ class ExperimentProcess:
 
     def _run_discharge(self, pressure, params: ExperimentParams, nidaq, power) -> DischargeComplete | DischargeSkipped:
         # starting at atmosphere
-        MIN_PRESSURE = 1 # Torr
+        MIN_PRESSURE = 0.5 # Torr
         try:
             # because the valves and feedthrough are on different output tasks we need to either stop all of the
             # valves while setting feedthrough. or we set the feedthrough before all of the pressure stuff is done. 
@@ -205,15 +205,17 @@ class ExperimentProcess:
             self.logger.info(f"Chamber reached minimum pressure: {MIN_PRESSURE} Torr")
             time.sleep(0.5)
             self.controller.run("nidaq_pressure_read", 'nidaq', "start_pressure_acquisition")
-            if pressure > 1.8:
+            if pressure > 1.7:
                 self.controller.run("nidaq_open_secondary_pump", 'nidaq', "open_valve", valve=1)
+            if pressure > 1.7 and pressure <= 1.9:
+                return DischargeSkipped(params.index, "invalid pressure")
             # set PI controller to target pressure with event
-            if pressure < 1.8 or pressure > 3.5:
+            if pressure > 6.75:
+                self.controller.run("nidaq_close_valves", "nidaq", "close_valves")
+            if pressure <= 1.7 or pressure > 1.9:
                 self.controller.run("nidaq_set_pi", 'nidaq', "set_PI", kp = 0.1, ki=0.005, pressure_torr = pressure)
                 self.controller.run("nidaq_start_pi", 'nidaq', "start_PI", settled_event = self.pi_settled_event)
             # wait for settled event to trigger
-            if pressure > 6.75:
-                self.controller.run("nidaq_close_valves", "nidaq", "close_valves")
             while not self.pi_settled_event.is_set():
                 if self._abort.is_set():
                     self.logger.warning("Abort event detected. stopping discharge")
@@ -242,9 +244,9 @@ class ExperimentProcess:
                 # record which event triggers first
             if self.oscope_trigger.is_set():
                 trigger_str = "osc"
-                self.controller.get("osc").capture()
             elif self.power_trigger.is_set():
                 trigger_str = "pwr"
+            self.controller.get("osc").capture()
             self.controller.stamp_trigger(trigger_str)
 
             self.controller.run("nidaq_stop", "nidaq", "stop_pressure_acquisition")
@@ -270,7 +272,7 @@ class ExperimentProcess:
             self.controller.run("pwr_stop", "pwr", "stop")
         if not osc.triggered:
             self.controller.run("osc_stop", "osc", "stop")
-        time.sleep(0.5)
+        time.sleep(2)
 
         
 
