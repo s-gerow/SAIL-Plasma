@@ -12,6 +12,9 @@ class HDF5Reader:
         self._save_dir: Path = Path("c:/Users/gerows/Python/SAIL-Plasma/BeAMED_v3/data")
         self.open = False
 
+    def is_open(self):
+        return self.open
+
     def open_file(self, filepath: Path | str):
         if os.path.exists(self._save_dir/filepath):
             print(f"Successfully opened file: {self._save_dir/filepath}")
@@ -20,6 +23,12 @@ class HDF5Reader:
             return
         self.filepath = Path(filepath)
         self.open = True
+
+    def close_file(self):
+        if self.open:
+            self.filepath = None
+            self.open = False
+        return
 
     def set_directory(self, dir_ = Path | str):
         self._save_dir = dir_
@@ -32,7 +41,37 @@ class HDF5Reader:
         if not self.open:
             return
         with h5py.File(self._save_dir/self.filepath, mode='r') as f:
-            print(list(f['discharges']))
+            return list(f['discharges'])
+
+    def get_discharge_group(self):
+        if not self.open:
+            return
+        with h5py.File(self._save_dir/self.filepath, mode='r') as f:
+            return f['discharges']
+    
+    def get_paschen_data(self):
+        # ['current_pwr', 'current_pwr_err', 'gap_cm', 'gap_err', 'pd_kjl_err', 'pd_mks_err', 'pressure_kjl', 'pressure_kjl_err', 'pressure_mks', 'pressure_mks_err', 'source', 'voltage_dmm', 'voltage_dmm_err', 'voltage_pwr', 'voltage_pwr_err']
+        if not self.open:
+            return
+        vcr_pwr = []
+        vcr_dmm = []
+        pd_kjl = []
+        pd_mks = []
+        vcr_pwr_err = []
+        vcr_dmm_err = []
+        pd_kjl_err = []
+        pd_mks_err = []
+        with h5py.File(self._save_dir/self.filepath, mode='r') as f:
+            for key in f['discharges']:
+                vcr_dmm.append(f['discharges'][key]['critical data'].attrs['voltage_dmm'])
+                vcr_dmm_err.append(f['discharges'][key]['critical data'].attrs['voltage_dmm_err'])
+                vcr_pwr.append(f['discharges'][key]['critical data'].attrs['voltage_pwr'])
+                vcr_pwr_err.append(f['discharges'][key]['critical data'].attrs['voltage_pwr_err'])
+                pd_mks.append(f['discharges'][key]['critical data'].attrs['pressure_mks']*f['discharges'][key]['critical data'].attrs['gap_cm'])
+                pd_mks_err.append(f['discharges'][key]['critical data'].attrs['pd_mks_err'])
+                pd_kjl.append(f['discharges'][key]['critical data'].attrs['pressure_kjl']*f['discharges'][key]['critical data'].attrs['gap_cm'])
+                pd_kjl_err.append(f['discharges'][key]['critical data'].attrs['pd_kjl_err'])
+        return ((vcr_pwr, vcr_pwr_err), (vcr_dmm, vcr_dmm_err), (pd_mks, pd_mks_err), (pd_kjl, pd_kjl_err))
 
     def plot_discharge_timeseries(self, index: int):
         if not self.open:

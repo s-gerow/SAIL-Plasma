@@ -333,7 +333,10 @@ class subsystemMFC:
             kd = self.kd
             setpoint_torr = self._setpoint
         error = setpoint_torr - prev_val
-        integral += error*dt
+        if error > 0.5:
+            integral = 0
+        else:
+            integral += error*dt
         derivative = (error - prev_err) / dt
         control = (kp * error) + (ki * integral) + (kd * derivative)
         control_mod = (control*self.VOLUME)*(1.333224)*(1/0.0168875)*(5/100) #V

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Callable
+import platform
 
 # ── colours ───────────────────────────────────────────────────────────────────
 
@@ -218,6 +219,31 @@ class ValueDisplay(tk.Frame):
     def set_lbl(self, lbl:str):
         self.lbl.config(text=lbl)
 
+class TreeButton(tk.Checkbutton):
+    def __init__(self, parent, enable_command: str, disable_command: str, text: str, **kwargs):
+        self._enable_command: Callable[..., any] = enable_command
+        self._disable_command: Callable[..., any] = disable_command
+        self.var = tk.IntVar(value=0)
+        super().__init__(parent,
+                         text=text,
+                         indicatoron=False,
+                         command=self.toggle,
+                         onvalue=1,
+                         offvalue=0,
+                         variable=self.var,
+                         **kwargs)
+        
+    def toggle(self):
+        print(self.var.get())
+        if self.var.get() == 1:
+            self._enable_command()
+        if self.var.get() == 0:
+            self._disable_command()
+
+    def set_state(self, state: int):
+        self.var.set(state)
+        self.toggle()
+
 
 class EnableButton(tk.Checkbutton):
         def __init__(self, parent, enable_command: str, disable_command:str, text_variable: tk.Variable, on_text:str = 'T: Enable', off_text:str = 'F: Disable',**kwargs):
@@ -250,3 +276,76 @@ class EnableButton(tk.Checkbutton):
             elif self._var.get() == "Disable":
                 self.configure(text=self.off_text)
                 self._disable_command()
+
+class ScrollFrame(ttk.LabelFrame):
+    def __init__(self, master, text, **kwargs):
+        super().__init__(master, text=text, **kwargs)
+
+        canvas = tk.Canvas(self, borderwidth=0)
+        self.scrollable = tk.Frame(canvas)
+
+        vsb = tk.Scrollbar(self, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+
+        vsb.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+
+        canvas.create_window((4,4), window=self.scrollable, anchor='nw')
+
+        self.scrollable.bind("<Configure>", lambda event, canvas=canvas: self.onFrameConfigure(canvas))
+        canvas.bind("<Enter>", lambda e: self._bind_to_mousewheel(canvas))
+        canvas.bind("<Leave>", lambda e: self._unbind_from_mousewheel(canvas))
+
+    def onFrameConfigure(self, canvas):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    #used to allow for scrolling with the mouse wheel when hovering over the canvas
+    def _on_mousewheel(self, event, canvas):
+        """Handle mousewheel events for different platforms."""
+        system = platform.system()
+        # Windows reports event.delta in multiples of 120
+        try:
+            if system == 'Windows':
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            elif system == 'Darwin':
+                # macOS reports smaller delta values; use them directly
+                canvas.yview_scroll(int(-1*event.delta), "units")
+            else:
+                # X11 (Linux) often uses Button-4/5 events instead of delta
+                if hasattr(event, 'num') and event.num in (4,5):
+                    if event.num == 4:
+                        canvas.yview_scroll(-1, "units")
+                    else:
+                        canvas.yview_scroll(1, "units")
+                else:
+                    # fallback
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        except Exception:
+            # safe fallback if event attributes are unexpected
+            pass
+    
+        #also allows for scrolling with the mouse wheel when hovering over the canvas
+    def _bind_to_mousewheel(self, canvas):
+        """Bind the appropriate mousewheel events to the given canvas."""
+        system = platform.system()
+        if system in ('Windows', 'Darwin'):
+            # bind to all so the events are captured while the cursor is over the canvas
+            canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel(e, canvas))
+        else:
+            # X11: bind both the wheel buttons and MouseWheel as a fallback
+            canvas.bind_all("<Button-4>", lambda e: self._on_mousewheel(e, canvas))
+            canvas.bind_all("<Button-5>", lambda e: self._on_mousewheel(e, canvas))
+            canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel(e, canvas))
+
+    #allows you to not scroll all the time
+    def _unbind_from_mousewheel(self, canvas):
+        """Remove the mousewheel bindings added by _bind_to_mousewheel."""
+        try:
+            canvas.unbind_all("<MouseWheel>")
+        except Exception:
+            pass
+        try:
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+        except Exception:
+            pass    

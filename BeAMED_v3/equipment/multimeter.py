@@ -58,8 +58,8 @@ class KeithleyDMM6500(VisaEquipment):
         if self._running:
             self.logger.warning("Continuous dmm acquisition thread already runnning")
             return
-        with self._lock:
-            self.write("INIT")
+        # with self._lock:
+        #     self.write("INIT")
         time.sleep(0.1)
         self._running = True
         self._thread = threading.Thread(
@@ -99,6 +99,7 @@ class KeithleyDMM6500(VisaEquipment):
                 t = time.perf_counter()
                 with self._lock:
                     values = float(self.query(":READ?"))
+                time.sleep(0.01)
                 readings = [(t, values)]
                 if trigger_event:
                     if values < trigger_value:
@@ -116,6 +117,15 @@ class KeithleyDMM6500(VisaEquipment):
                     break
             except Exception as e:
                 self.logger.exception("DMM acquisition error")
+                try:
+                    self.resource.clear()          # flush I/O buffers, recover the session
+                    time.sleep(0.1)
+                    self.write("*CLS")
+                    errs = self.query(":SYSTem:ERRor:ALL?")
+                    self.logger.error(f"Instrument error queue after recovery: {errs}")
+                except Exception:
+                    self.logger.exception("Recovery/error-queue read also failed")
+                self._running = False
                 break
 
     def getStatus(self):

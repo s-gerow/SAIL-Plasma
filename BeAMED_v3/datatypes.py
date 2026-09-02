@@ -244,3 +244,20 @@ class RunData:
     waveform: Waveform = field(default_factory=Waveform)
     t_start: float | None = None
     t_end: float | None = None
+
+@dataclass
+class PaschenFigureData:
+    gap: int | None = None
+    gas: str | None = None
+    anode_mat: str | None = None
+    cathode_mat: str | None = None
+    anode_shape: str | None = None
+    cathode_shape: str | None = None
+    pd: np.ndarray | None = None
+    v_cr: np.ndarray | None = None
+    pd_err: np.ndarray | None = None
+    vcr_err: np.ndarray | None = None
+    configs: dict = field(default_factory=dict)
+    figure: Path | None = None
+
+    
