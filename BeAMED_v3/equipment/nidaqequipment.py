@@ -377,7 +377,7 @@ class subsystemMFC:
     #     return sccm
     
     def start_pi(self, settled_event: threading.Event | None = None,
-                 tolerance: float = 0.05, settle_time: float=30.0):
+                 tolerance: float = 0.05, settle_time: float=200.0):
         if self._running:
             self.logger.warning("PI control loop already runnning")
             return

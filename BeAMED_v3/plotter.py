@@ -102,20 +102,17 @@ class plot_app(tk.Tk):
         self.reader.open_file(path)
         discharges = self.reader.list_discharges()
         res = reduce(lambda x,y: max(x,y), map(len,discharges))
-        pd_ = np.zeros(shape=(len(discharges,)))
-        pd_err = np.zeros(shape=(len(discharges,)))
-        vcr = np.zeros(shape=(len(discharges,)))
-        vcr_err = np.zeros(shape=(len(discharges,)))
-        for i,discharge in enumerate(discharges):
+        self.paschen_figure = self.reader.get_paschen_data(self.paschen_figure)
+        for discharge in discharges:
             tk.Button(self.discharge_frame.scrollable, text = discharge, width=res).grid(row=_row, column=0)
-            #pd_[i] = discharge_data[i]
             _row+=1
 
     def plot_paschen_curve(self):
         self.axes.clear()
         if self.reader.is_open():
-            vcr, pd = self.reader.get_paschen_data()
-            self.axes.scatter(pd, vcr)
+            #_, vcr, pd_, _ = self.reader.get_paschen_data()
+            #vcr, _, pd_, _ = self.reader.get_paschen_data()
+            self.axes.scatter(self.paschen_figure.pd_mks, self.paschen_figure.vcr_dmm, label = "h5")
             self.axes.legend()
             self.figure_canvas.draw()
         else:
@@ -136,6 +133,12 @@ class plot_app(tk.Tk):
             result = messagebox.askokcancel("Append Data?", "You already have Paschen curve data imported, would you like to append this file to the current plot?")
             if not result:
                 return
+            else:
+                pd_, v, _, _ = open_data(filepath=file_path)
+                self.axes.scatter(pd_, v, label = "Excel")
+                self.axes.legend()
+                self.figure_canvas.draw()
+
             
         
 

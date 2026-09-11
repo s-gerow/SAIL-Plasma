@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
+from datatypes import PaschenFigureData
 
 class HDF5Reader:
     def __init__(self):
@@ -49,7 +50,7 @@ class HDF5Reader:
         with h5py.File(self._save_dir/self.filepath, mode='r') as f:
             return f['discharges']
     
-    def get_paschen_data(self):
+    def get_paschen_data(self, data_object: PaschenFigureData | None = None):
         # ['current_pwr', 'current_pwr_err', 'gap_cm', 'gap_err', 'pd_kjl_err', 'pd_mks_err', 'pressure_kjl', 'pressure_kjl_err', 'pressure_mks', 'pressure_mks_err', 'source', 'voltage_dmm', 'voltage_dmm_err', 'voltage_pwr', 'voltage_pwr_err']
         if not self.open:
             return
@@ -71,7 +72,18 @@ class HDF5Reader:
                 pd_mks_err.append(f['discharges'][key]['critical data'].attrs['pd_mks_err'])
                 pd_kjl.append(f['discharges'][key]['critical data'].attrs['pressure_kjl']*f['discharges'][key]['critical data'].attrs['gap_cm'])
                 pd_kjl_err.append(f['discharges'][key]['critical data'].attrs['pd_kjl_err'])
-        return ((vcr_pwr, vcr_pwr_err), (vcr_dmm, vcr_dmm_err), (pd_mks, pd_mks_err), (pd_kjl, pd_kjl_err))
+        if not data_object:
+            return ((vcr_pwr, vcr_pwr_err), (vcr_dmm, vcr_dmm_err), (pd_mks, pd_mks_err), (pd_kjl, pd_kjl_err))
+        else:
+            data_object.vcr_pwr = np.array(vcr_pwr)
+            data_object.vcr_pwr_err = np.array(vcr_pwr_err)
+            data_object.vcr_dmm = np.array(vcr_dmm)
+            data_object.vcr_dmm_err = np.array(vcr_dmm_err)
+            data_object.pd_mks = np.array(pd_mks)
+            data_object.pd_mks_err = np.array(pd_mks_err)
+            data_object.pd_kjl = np.array(pd_kjl)
+            data_object.pd_kjl_err = np.array(pd_kjl_err)
+            return data_object
 
     def plot_discharge_timeseries(self, index: int):
         if not self.open:

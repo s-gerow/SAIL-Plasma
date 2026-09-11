@@ -253,10 +253,14 @@ class PaschenFigureData:
     cathode_mat: str | None = None
     anode_shape: str | None = None
     cathode_shape: str | None = None
-    pd: np.ndarray | None = None
-    v_cr: np.ndarray | None = None
-    pd_err: np.ndarray | None = None
-    vcr_err: np.ndarray | None = None
+    pd_mks: np.ndarray | None = None
+    pd_kjl: np.ndarray | None = None 
+    vcr_dmm: np.ndarray | None = None
+    vcr_pwr: np.ndarray | None = None
+    pd_mks_err: np.ndarray | None = None
+    pd_kjl_err: np.ndarray | None = None
+    vcr_dmm_err: np.ndarray | None = None
+    vcr_pwr_err: np.ndarray | None = None
     configs: dict = field(default_factory=dict)
     figure: Path | None = None
 
