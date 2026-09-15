@@ -17,6 +17,9 @@ class HDF5Reader:
         return self.open
 
     def open_file(self, filepath: Path | str):
+        if self.open:
+            print("file currently open, cannot open another file")
+            return
         if os.path.exists(self._save_dir/filepath):
             print(f"Successfully opened file: {self._save_dir/filepath}")
         else:
@@ -73,6 +76,7 @@ class HDF5Reader:
                 pd_kjl.append(f['discharges'][key]['critical data'].attrs['pressure_kjl']*f['discharges'][key]['critical data'].attrs['gap_cm'])
                 pd_kjl_err.append(f['discharges'][key]['critical data'].attrs['pd_kjl_err'])
         if not data_object:
+            data = PaschenFigureData()
             return ((vcr_pwr, vcr_pwr_err), (vcr_dmm, vcr_dmm_err), (pd_mks, pd_mks_err), (pd_kjl, pd_kjl_err))
         else:
             data_object.vcr_pwr = np.array(vcr_pwr)
@@ -84,6 +88,11 @@ class HDF5Reader:
             data_object.pd_kjl = np.array(pd_kjl)
             data_object.pd_kjl_err = np.array(pd_kjl_err)
             return data_object
+
+    def get_discharge_data(self):
+        if not self.open:
+            return
+        
 
     def plot_discharge_timeseries(self, index: int):
         if not self.open:

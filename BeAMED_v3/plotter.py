@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 from dataanalysis import *
 from datatypes import PaschenFigureData
 from tkinter import messagebox
+from dataclasses import field
 
 class plot_app(tk.Tk):
     def __init__(self):
@@ -20,9 +21,17 @@ class plot_app(tk.Tk):
         self.state('zoomed')
         self.work_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
         self.reader = HDF5Reader()
-        self.figure = Figure(dpi=100)
-        self.axes = self.figure.add_subplot()
-        self.paschen_figure = PaschenFigureData()
+
+        self.paschen_figure_plot = Figure(dpi=90)
+        self.paschen_axes = self.paschen_figure_plot.add_subplot()
+        self.paschen_figure = dict[str,PaschenFigureData]
+
+        self.discharge_figure_plot = Figure(dpi=90)
+        self.discharge_axes = self.discharge_figure_plot.add_subplot()
+
+        self.selected_files = {}
+        self.selected_file_frames = {}
+        self.selected_points = []
 
         print(f'HDF5 Plotter started in working directory {self.work_dir}')
         self._init_frames()
@@ -30,6 +39,8 @@ class plot_app(tk.Tk):
         self._init_discharges()
         self._init_controls()
         self._init_plot()
+        self._init_discharge_info()
+        self._init_discharge_plot()
 
     def _init_frames(self):
         self.file_frame = tk.LabelFrame(self, text="Files")
@@ -44,22 +55,42 @@ class plot_app(tk.Tk):
         self.plot_frame = tk.LabelFrame(self, text="Plot")
         self.plot_frame.grid(row=0, column=3, columnspan=2, sticky = 'nsew')
         # self.columnconfigure(3, weight=2)
+        self.discharge_info_frame = tk.LabelFrame(self, text = "Discharge Data")
+        self.discharge_info_frame.grid(row=1, column=0, columnspan=3, sticky='nsew')
+
+        self.discharge_time_plot_frame = tk.LabelFrame(self, text="Discharge Timeseries")
+        self.discharge_time_plot_frame.grid(row=1, column=3, sticky='nsew')
 
     def _init_files(self):
         tk.Button(self.file_frame, command=self.go_parent_dir, text=". .").grid(row=0, column=0)
         self.read_dir()
 
     def _init_discharges(self):
-        tk.Label(self.discharge_frame.scrollable, text="Discharges").grid(row=0, column=0)
+        for widget in self.discharge_frame.scrollable.winfo_children():
+                widget.destroy()
+        for i,(file,path) in enumerate(self.selected_files.items()):
+            self.selected_file_frames[file] = tk.LabelFrame(self.discharge_frame.scrollable, text=file)
+            self.selected_file_frames[file].pack(side='left',fill = 'y')
+            self.open_h5(path)
+            # self.selected_file_buttons[file] = TreeButton(self.selected_file_frame, enable_command=lambda dir = path: self.open_h5(dir), disable_command=self.close_h5, text=file)
+            # self.selected_file_buttons[file].grid(row=i, column=0)
 
     def _init_controls(self):
         tk.Button(self.input_frame, text="Plot", command=lambda: self.plot_paschen_curve()).grid(row=0, column=0)
         tk.Button(self.input_frame, text="Import Legacy Data", command=self.import_excel_data).grid(row=1, column=0)
 
     def _init_plot(self):
-        self.figure_canvas = FigureCanvasTkAgg(self.figure, self.plot_frame)
-        NavigationToolbar2Tk(self.figure_canvas, self.plot_frame).pack(side='bottom')
-        self.figure_canvas.get_tk_widget().pack(side='bottom')
+        self.paschen_figure_canvas = FigureCanvasTkAgg(self.paschen_figure_plot, self.plot_frame)
+        NavigationToolbar2Tk(self.paschen_figure_canvas, self.plot_frame).pack(side='bottom')
+        self.paschen_figure_canvas.get_tk_widget().pack(side='bottom')
+
+    def _init_discharge_info(self):
+        tk.Label(self.discharge_info_frame, text="filler").grid(row=0, column=1, sticky='nsew')
+
+    def _init_discharge_plot(self):
+        self.discharge_figure_canvas = FigureCanvasTkAgg(self.discharge_figure_plot, self.discharge_time_plot_frame)
+        NavigationToolbar2Tk(self.discharge_figure_canvas, self.discharge_time_plot_frame).pack(side='bottom')
+        self.discharge_figure_canvas.get_tk_widget().pack(side='bottom')
 
     def read_dir(self):
         dir_list = os.scandir(self.work_dir)
@@ -78,7 +109,7 @@ class plot_app(tk.Tk):
                 if 'h5' in element.name:
                     if 'test' in element.name:
                         continue
-                    TreeButton(self.file_frame, enable_command=lambda dir = element.path: self.open_h5(dir), disable_command=self.close_h5, text=element.name, width=res).grid(row=_row, column=0)
+                    TreeButton(self.file_frame, enable_command=lambda dir = element.path, name = element.name: self.select_h5(name, dir), disable_command=lambda name=element.name: self.deselect_h5(name), text=element.name, width=res).grid(row=_row, column=0)
                 else:
                     tk.Checkbutton(self.file_frame, state='disabled', text=element.name, width=res, indicatoron=False).grid(row=_row, column=0)
             _row+=1
@@ -95,33 +126,48 @@ class plot_app(tk.Tk):
         self.work_dir = parent_dir
         self.open_dir(parent_dir)
 
+    def select_h5(self, file, path):
+        self.selected_files[file] = path
+        print(self.selected_files.keys())
+        self._init_discharges()
+
+    def deselect_h5(self, file):
+        try:
+            if file in self.selected_files.keys():
+                self.selected_files.pop(file)
+            self._init_discharges()
+        except KeyError:
+            print(f"{file} not in selection")
+        
+
     def open_h5(self, path):
-        _row=1
-        for widget in self.discharge_frame.scrollable.winfo_children():
-            widget.destroy()
+        _row=0
+        #self._init_discharges()
         self.reader.open_file(path)
         discharges = self.reader.list_discharges()
         res = reduce(lambda x,y: max(x,y), map(len,discharges))
-        self.paschen_figure = self.reader.get_paschen_data(self.paschen_figure)
+        file_key = list(filter(lambda key: self.selected_files[key] == path, self.selected_files))[0]
+        self.paschen_figure[file_key] = self.reader.get_paschen_data()
+        frame = self.selected_file_frames[file_key]
         for discharge in discharges:
-            tk.Button(self.discharge_frame.scrollable, text = discharge, width=res).grid(row=_row, column=0)
+            tk.Button(frame, text = discharge, width=res).grid(row=_row, column=0)
             _row+=1
+        self.reader.close_file()
 
     def plot_paschen_curve(self):
-        self.axes.clear()
+        self.paschen_axes.clear()
         if self.reader.is_open():
             #_, vcr, pd_, _ = self.reader.get_paschen_data()
             #vcr, _, pd_, _ = self.reader.get_paschen_data()
-            self.axes.scatter(self.paschen_figure.pd_mks, self.paschen_figure.vcr_dmm, label = "h5")
-            self.axes.legend()
-            self.figure_canvas.draw()
+            self.paschen_axes.scatter(self.paschen_figure.pd_mks, self.paschen_figure.vcr_dmm, label = "h5")
+            self.paschen_axes.legend()
+            self.paschen_figure_canvas.draw()
         else:
             print("no file open")
 
     def close_h5(self):
-        for widget in self.discharge_frame.scrollable.winfo_children():
-            widget.destroy()
-        self.reader.close_file()
+        self._init_discharges()
+        #self.reader.close_file()
         self.paschen_figure = PaschenFigureData()
 
     def import_excel_data(self):
@@ -135,9 +181,9 @@ class plot_app(tk.Tk):
                 return
             else:
                 pd_, v, _, _ = open_data(filepath=file_path)
-                self.axes.scatter(pd_, v, label = "Excel")
-                self.axes.legend()
-                self.figure_canvas.draw()
+                self.paschen_axes.scatter(pd_, v, label = "Excel")
+                self.paschen_axes.legend()
+                self.paschen_figure_canvas.draw()
 
             
         

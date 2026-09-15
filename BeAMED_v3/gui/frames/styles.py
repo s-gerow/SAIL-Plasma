@@ -285,9 +285,12 @@ class ScrollFrame(ttk.LabelFrame):
         self.scrollable = tk.Frame(canvas)
 
         vsb = tk.Scrollbar(self, orient='vertical', command=canvas.yview)
+        hsb = tk.Scrollbar(self, orient='horizontal', command=canvas.xview)
         canvas.configure(yscrollcommand=vsb.set)
+        canvas.configure(xscrollcommand=hsb.set)
 
         vsb.pack(side='right', fill='y')
+        hsb.pack(side='bottom', fill='x')
         canvas.pack(side='left', fill='both', expand=True)
 
         canvas.create_window((4,4), window=self.scrollable, anchor='nw')
@@ -300,7 +303,7 @@ class ScrollFrame(ttk.LabelFrame):
         canvas.configure(scrollregion=canvas.bbox("all"))
 
     #used to allow for scrolling with the mouse wheel when hovering over the canvas
-    def _on_mousewheel(self, event, canvas):
+    def _on_mousewheel_vert(self, event, canvas):
         """Handle mousewheel events for different platforms."""
         system = platform.system()
         # Windows reports event.delta in multiples of 120
@@ -323,6 +326,30 @@ class ScrollFrame(ttk.LabelFrame):
         except Exception:
             # safe fallback if event attributes are unexpected
             pass
+
+    def _on_mousewheel_horz(self, event, canvas):
+        """Handle mousewheel events for different platforms."""
+        system = platform.system()
+        # Windows reports event.delta in multiples of 120
+        try:
+            if system == 'Windows':
+                canvas.xview_scroll(int(-1*(event.delta/120)), "units")
+            elif system == 'Darwin':
+                # macOS reports smaller delta values; use them directly
+                canvas.xview_scroll(int(-1*event.delta), "units")
+            else:
+                # X11 (Linux) often uses Button-4/5 events instead of delta
+                if hasattr(event, 'num') and event.num in (4,5):
+                    if event.num == 4:
+                        canvas.xview_scroll(-1, "units")
+                    else:
+                        canvas.xview_scroll(1, "units")
+                else:
+                    # fallback
+                    canvas.xview_scroll(int(-1*(event.delta/120)), "units")
+        except Exception:
+            # safe fallback if event attributes are unexpected
+            pass
     
         #also allows for scrolling with the mouse wheel when hovering over the canvas
     def _bind_to_mousewheel(self, canvas):
@@ -330,18 +357,20 @@ class ScrollFrame(ttk.LabelFrame):
         system = platform.system()
         if system in ('Windows', 'Darwin'):
             # bind to all so the events are captured while the cursor is over the canvas
-            canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel(e, canvas))
-        else:
-            # X11: bind both the wheel buttons and MouseWheel as a fallback
-            canvas.bind_all("<Button-4>", lambda e: self._on_mousewheel(e, canvas))
-            canvas.bind_all("<Button-5>", lambda e: self._on_mousewheel(e, canvas))
-            canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel(e, canvas))
+            canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel_vert(e, canvas))
+            canvas.bind_all("<Shift-MouseWheel>", lambda e: self._on_mousewheel_horz(e, canvas))
+        # else:
+        #     # X11: bind both the wheel buttons and MouseWheel as a fallback
+        #     canvas.bind_all("<Button-4>", lambda e: self._on_mousewheel(e, canvas))
+        #     canvas.bind_all("<Button-5>", lambda e: self._on_mousewheel(e, canvas))
+        #     canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel(e, canvas))
 
     #allows you to not scroll all the time
     def _unbind_from_mousewheel(self, canvas):
         """Remove the mousewheel bindings added by _bind_to_mousewheel."""
         try:
             canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Shift-MouseWheel")
         except Exception:
             pass
         try:

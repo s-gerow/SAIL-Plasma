@@ -264,4 +264,12 @@ class PaschenFigureData:
     configs: dict = field(default_factory=dict)
     figure: Path | None = None
 
-    
+@dataclass
+class DischargeData_h5:
+    metadata: DischargeMeta = field(default_factory=DischargeMeta)
+    data: DischargeData = field(default_factory=DischargeData)
+    psu_time: PowerSeries = field(default_factory=PowerSeries)
+    dmm_time: DMMSeries = field(default_factory=DMMSeries)
+    mfc_time: MFCTimeseries = field(default_factory=MFCTimeseries)
+    pressure_time: PressureTimeseries = field(default_factory=PressureTimeseries)
+    osc_time: Waveform = field(default_factory=Waveform)
