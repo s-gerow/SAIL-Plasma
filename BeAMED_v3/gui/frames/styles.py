@@ -234,7 +234,7 @@ class TreeButton(tk.Checkbutton):
                          **kwargs)
         
     def toggle(self):
-        print(self.var.get())
+        #print(self.var.get())
         if self.var.get() == 1:
             self._enable_command()
         if self.var.get() == 0:

@@ -24,7 +24,7 @@ class plot_app(tk.Tk):
 
         self.paschen_figure_plot = Figure(dpi=90)
         self.paschen_axes = self.paschen_figure_plot.add_subplot()
-        self.paschen_figure = dict[str,PaschenFigureData]
+        self.paschen_figure: dict[str,PaschenFigureData] = {}
 
         self.discharge_figure_plot = Figure(dpi=90)
         self.discharge_axes = self.discharge_figure_plot.add_subplot()
@@ -78,6 +78,7 @@ class plot_app(tk.Tk):
     def _init_controls(self):
         tk.Button(self.input_frame, text="Plot", command=lambda: self.plot_paschen_curve()).grid(row=0, column=0)
         tk.Button(self.input_frame, text="Import Legacy Data", command=self.import_excel_data).grid(row=1, column=0)
+        tk.Button(self.input_frame, text="Clear Plot", command=self.clear_plot).grid(row=2,column=0)
 
     def _init_plot(self):
         self.paschen_figure_canvas = FigureCanvasTkAgg(self.paschen_figure_plot, self.plot_frame)
@@ -135,7 +136,7 @@ class plot_app(tk.Tk):
         try:
             if file in self.selected_files.keys():
                 self.selected_files.pop(file)
-            self._init_discharges()
+            self.close_h5(file)
         except KeyError:
             print(f"{file} not in selection")
         
@@ -156,26 +157,29 @@ class plot_app(tk.Tk):
 
     def plot_paschen_curve(self):
         self.paschen_axes.clear()
-        if self.reader.is_open():
-            #_, vcr, pd_, _ = self.reader.get_paschen_data()
-            #vcr, _, pd_, _ = self.reader.get_paschen_data()
-            self.paschen_axes.scatter(self.paschen_figure.pd_mks, self.paschen_figure.vcr_dmm, label = "h5")
-            self.paschen_axes.legend()
-            self.paschen_figure_canvas.draw()
+        if len(self.paschen_figure) > 0:
+            for name,figure in self.paschen_figure.items():
+                #_, vcr, pd_, _ = self.reader.get_paschen_data()
+                #vcr, _, pd_, _ = self.reader.get_paschen_data()
+                print(type(self.paschen_figure[name]))
+                self.paschen_axes.scatter(self.paschen_figure[name].pd_mks, self.paschen_figure[name].vcr_dmm, label = f"h5: {name}")
+                self.paschen_axes.legend()
+                self.paschen_figure_canvas.draw()
         else:
             print("no file open")
 
-    def close_h5(self):
+    def close_h5(self, file):
         self._init_discharges()
-        #self.reader.close_file()
-        self.paschen_figure = PaschenFigureData()
+        if file in self.paschen_figure.keys():
+            self.paschen_figure.pop(file)
+        
 
     def import_excel_data(self):
         file_path = fd.askopenfilename(title="Select Data Source", filetypes=[("CSV files", "*.csv")])
         if not file_path:
             print("no file selected")
             return
-        if self.reader.is_open():
+        if len(self.paschen_figure) > 0:
             result = messagebox.askokcancel("Append Data?", "You already have Paschen curve data imported, would you like to append this file to the current plot?")
             if not result:
                 return
@@ -185,6 +189,9 @@ class plot_app(tk.Tk):
                 self.paschen_axes.legend()
                 self.paschen_figure_canvas.draw()
 
+    def clear_plot(self):
+        self.paschen_axes.clear()
+        self.paschen_figure_canvas.draw()
             
         
 

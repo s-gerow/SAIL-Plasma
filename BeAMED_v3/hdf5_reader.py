@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-from datatypes import PaschenFigureData
+from datatypes import PaschenFigureData, DischargeData_h5, DischargeMeta, DischargeData, MFCTimeseries, PressureTimeseries, PowerSeries, DMMSeries, Waveform
 
 class HDF5Reader:
     def __init__(self):
@@ -75,23 +75,30 @@ class HDF5Reader:
                 pd_mks_err.append(f['discharges'][key]['critical data'].attrs['pd_mks_err'])
                 pd_kjl.append(f['discharges'][key]['critical data'].attrs['pressure_kjl']*f['discharges'][key]['critical data'].attrs['gap_cm'])
                 pd_kjl_err.append(f['discharges'][key]['critical data'].attrs['pd_kjl_err'])
-        if not data_object:
-            data = PaschenFigureData()
-            return ((vcr_pwr, vcr_pwr_err), (vcr_dmm, vcr_dmm_err), (pd_mks, pd_mks_err), (pd_kjl, pd_kjl_err))
-        else:
-            data_object.vcr_pwr = np.array(vcr_pwr)
-            data_object.vcr_pwr_err = np.array(vcr_pwr_err)
-            data_object.vcr_dmm = np.array(vcr_dmm)
-            data_object.vcr_dmm_err = np.array(vcr_dmm_err)
-            data_object.pd_mks = np.array(pd_mks)
-            data_object.pd_mks_err = np.array(pd_mks_err)
-            data_object.pd_kjl = np.array(pd_kjl)
-            data_object.pd_kjl_err = np.array(pd_kjl_err)
-            return data_object
+            if not data_object:
+                data = PaschenFigureData(
+                    gap = f['meta'].attrs['gap_cm'],
+                    gas=f['meta'].attrs['gas_species'],
+                    anode_mat=f['meta'].attrs['anode_material'],
+                    anode_shape=f['meta'].attrs['anode_shape'],
+                    cathode_mat=f['meta'].attrs['cathode_material'],
+                    cathode_shape=f['meta'].attrs['cathode_shape'],
+                    vcr_dmm=vcr_dmm,
+                    vcr_dmm_err=vcr_dmm_err,
+                    vcr_pwr=vcr_pwr,
+                    vcr_pwr_err=vcr_pwr_err,
+                    pd_kjl=pd_kjl,
+                    pd_kjl_err=pd_kjl_err,
+                    pd_mks=pd_mks,
+                    pd_mks_err=pd_mks_err
+            )
+        return data
 
     def get_discharge_data(self):
         if not self.open:
             return
+        with h5py.File(self._save_dir/self.filepath, mode = 'r') as f:
+            meta: DischargeMeta = DischargeMeta()
         
 
     def plot_discharge_timeseries(self, index: int):
