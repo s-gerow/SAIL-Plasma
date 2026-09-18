@@ -94,11 +94,49 @@ class HDF5Reader:
             )
         return data
 
-    def get_discharge_data(self):
+    def get_discharge_data(self, point):
         if not self.open:
             return
         with h5py.File(self._save_dir/self.filepath, mode = 'r') as f:
-            meta: DischargeMeta = DischargeMeta()
+            meta: DischargeMeta = DischargeMeta(
+                date=f['discharges'][point]['meta'].attrs['date'],
+                trigger_source=f['discharges'][point]['meta'].attrs['trigger_source'],
+                notes=f['discharges'][point]['meta'].attrs['notes'],
+                gap_cm=f['discharges'][point]['meta'].attrs['gap_cm'],
+                gas_species=f['discharges'][point]['meta'].attrs['gas_species'],
+                cathode_material=f['discharges'][point]['meta'].attrs['cathode_material'],
+                anode_material=f['discharges'][point]['meta'].attrs['anode_material'],
+                cathode_shape=f['discharges'][point]['meta'].attrs['cathode_shape'],
+                anode_shape=f['discharges'][point]['meta'].attrs['anode_shape'])
+            data: DischargeData = DischargeData(
+                gap_cm=f['discharges'][point]['meta'].attrs['gap_cm'],
+                pressure_mks=f['discharges'][point]['critical data'].attrs['pressure_mks'],
+                pressure_kjl=f['discharges'][point]['critical data'].attrs['pressure_kjl'],
+                voltage_pwr=f['discharges'][point]['critical data'].attrs['voltage_pwr'],
+                current_pwr=f['discharges'][point]['critical data'].attrs['current_pwr'],
+                voltage_dmm=f['discharges'][point]['critical data'].attrs['voltage_dmm'],
+                source=f['discharges'][point]['meta'].attrs['trigger_source'],
+                pressure_kjl_err=f['discharges'][point]['critical data'].attrs['pressure_kjl_err'],
+                pressure_mks_err=f['discharges'][point]['critical data'].attrs['pressure_mks_err'],
+                voltage_pwr_err=f['discharges'][point]['critical data'].attrs['voltage_pwr_err'],
+                current_pwr_err=f['discharges'][point]['critical data'].attrs['current_pwr_err'],
+                voltage_dmm_err=f['discharges'][point]['critical data'].attrs['voltage_dmm_err'],
+                gap_err=f['discharges'][point]['critical data'].attrs['gap_err'],
+                pd_kjl_err=f['discharges'][point]['critical data'].attrs['pd_kjl_err'],
+                pd_mks_err=f['discharges'][point]['critical data'].attrs['pd_mks_err']
+            )
+            psu: PowerSeries = PowerSeries(
+                samples_voltage=(list(f['discharges'][point]['power_supply']['voltage_times']), list(f['discharges'][point]['power_supply']['voltage_values'])),
+                samples_current=(list(f['discharges'][point]['power_supply']['current_times']), list(f['discharges'][point]['power_supply']['current_values']))
+            )
+            dmm: DMMSeries = DMMSeries(
+                samples_voltage=(list(f['discharges'][point]['dmm']['voltage_times']), list(f['discharges'][point]['dmm']['voltage_values']))
+            )
+            pressure: PressureTimeseries = PressureTimeseries(
+                samples_mks= (list(f['discharges'][point]['pressure']['mks_times']), list(f['discharges'][point]['pressure']['mks_values'])),
+                samples_kjl= (list(f['discharges'][point]['pressure']['kjl_times']), list(f['discharges'][point]['pressure']['kjl_values']))
+            )
+            return DischargeData_h5(meta, data,psu,dmm,pressure_time=pressure)
         
 
     def plot_discharge_timeseries(self, index: int):

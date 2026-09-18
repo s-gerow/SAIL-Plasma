@@ -31,7 +31,7 @@ class plot_app(tk.Tk):
 
         self.selected_files = {}
         self.selected_file_frames = {}
-        self.selected_points = []
+        self.selected_points = {}
 
         print(f'HDF5 Plotter started in working directory {self.work_dir}')
         self._init_frames()
@@ -86,13 +86,26 @@ class plot_app(tk.Tk):
         self.paschen_figure_canvas.get_tk_widget().pack(side='bottom')
 
     def _init_discharge_info(self):
-        tk.Label(self.discharge_info_frame, text="filler").grid(row=0, column=1, sticky='nsew')
+        self.discharge_field_containers: dict[str,tk.Entry] = {}
+        for key in self.selected_points.keys():
+            frame = tk.LabelFrame(self.discharge_info_frame, text=key)
+            frame.pack(anchor='w', fill='y')
+            TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit)
+
 
     def _init_discharge_plot(self):
         self.discharge_figure_canvas = FigureCanvasTkAgg(self.discharge_figure_plot, self.discharge_time_plot_frame)
         NavigationToolbar2Tk(self.discharge_figure_canvas, self.discharge_time_plot_frame).pack(side='bottom')
         self.discharge_figure_canvas.get_tk_widget().pack(side='bottom')
 
+    def enable_discharge_edit(self):
+        for container in self.discharge_field_containers.values():
+            container.config(state='normal')
+
+    def disable_discharge_edit(self):
+        for container in self.discharge_field_containers.values():
+            container.config(state='readonly')
+    
     def read_dir(self):
         dir_list = os.scandir(self.work_dir)
         _row = 1
@@ -140,7 +153,6 @@ class plot_app(tk.Tk):
         except KeyError:
             print(f"{file} not in selection")
         
-
     def open_h5(self, path):
         _row=0
         #self._init_discharges()
@@ -173,7 +185,6 @@ class plot_app(tk.Tk):
         if file in self.paschen_figure.keys():
             self.paschen_figure.pop(file)
         
-
     def import_excel_data(self):
         file_path = fd.askopenfilename(title="Select Data Source", filetypes=[("CSV files", "*.csv")])
         if not file_path:
@@ -193,7 +204,11 @@ class plot_app(tk.Tk):
         self.paschen_axes.clear()
         self.paschen_figure_canvas.draw()
             
-        
+    def inspect_point(self, point, file):
+        self.reader.open_file(file)
+        self.selected_points[point] = self.reader.get_discharge_data(point)
+        self.reader.close_file()
+        self._init_discharge_info()
 
 if __name__ == "__main__":
     plotter = plot_app()
