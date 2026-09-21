@@ -1,74 +1,12 @@
 import numpy as np
 import pandas as pd
-from tkinter import filedialog as fd
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, brentq, root
 from scipy.special import erf
 import matplotlib.animation as animation
-import time
 from typing import Literal
 
 plt.rcParams['text.usetex'] = False
-
-class animator():
-    def __init__(self, fig, ax, filename):
-        self.fig = fig
-        self.ax = ax
-        self.filename = filename
-        self.artistlist = [[]]
-        self.persistentartist = []
-        self.persistentkeep = []
-
-    def set_persistent(self, artist, keep = False):
-        print(f'setting persistent artist list')
-        if isinstance(artist, list):
-            self.persistentartist = artist
-        else:
-            self.persistentartist = [artist]
-        if keep:
-            self.persistentkeep = self.persistentartist
-        self.artistlist[0] = self.persistentartist
-
-    def append_persistent(self, artist):
-        print('appending to persistent artist list')
-        if isinstance(artist, list):
-            self.persistentartist.extend(artist)
-        else:
-            self.persistentartist.append(artist)
-        self.artistlist[0] = self.persistentartist
-
-    def list_frames(self):
-        print('Current artists in artist list:')
-        for i, frame in enumerate(self.artistlist):
-            print(f"Frame: {i} | Artists: {frame}")
-        
-    def get_frame(self, frame_id):
-        return self.artistlist[frame_id]
-    
-    def add_new_frame(self, artists):
-        print('adding new animation frame')
-        local_list = self.persistentartist.copy()
-        if isinstance(artists, list):
-            local_list.extend(artists)
-        else:
-            local_list.append(artists)
-        self.artistlist.append(local_list)
-        #print(self.artistlist)
-
-    def append_frame(self, artists, frame_id):
-        local_list = self.artistlist[frame_id].copy()
-        if isinstance(artists, list):
-            local_list.extend(artists)
-        else:
-            local_list.append(artists)    
-        self.artistlist[frame_id] = local_list
-    
-    def generate_animation(self):
-        ani = animation.ArtistAnimation(self.fig, self.artistlist, interval=50, repeat = False)
-        ani.save(filename=f'{self.filename}Animation.gif')
-        plt.show()
-        return ani
-
 
 def open_data(filepath:str, use_ps_voltage:bool = False):
     '''
@@ -358,32 +296,3 @@ def RioussetEquation(p: np.ndarray, d: float, a: float, A: float, B: float, gg: 
             case 'sph':
                 Vcr[i] = E*(a-((b*a**2)/(b**2)))/(2-1)
     return Ecr, Vcr
-
-def main():
-    filepath = r'C:\Users\gerows\Python\SAIL-Plasma\202565_N2_5mm.csv'
-    p_d, v, pd_err, v_err = open_data(filepath=filepath)
-    fig, ax = plt.subplots()
-    ax.set(xlim=[p_d.min()-.50, p_d.max()+0.5], ylim=[v.min()-50, v.max()+50])
-
-    errorbarActor = ax.errorbar(p_d, v, v_err, pd_err, fmt='.', capsize=4, markerfacecolor = 'none')
-    artistList = [errorbarActor[0]]
-    artistList.extend(errorbarActor[1])
-    artistList.extend(errorbarActor[2])
-
-    ani_object = animator(fig, ax, filename="N2_ani")
-    ani_object.set_persistent(artistList, keep = True)
-
-    coeffs_list = optimize_fit(p_d, v, 5, 6, 5, animator=ani_object, animate=True)
-    coeffs = coeffs_list[0]
-    pd_fit, _ = split_data(p_d, v, coeffs_list[2][0], coeffs_list[2][1])
-    v_fit = eval_polynomial(pd_fit, coeffs)
-
-    ani = ani_object.generate_animation()
-    for artist in ani_object.get_frame(-1):
-        ax.add_artist(artist)
-        plt.show()
-        #ani_object.fig.savefig(fname = f'{ani_object.filename}OptimizedPlot.png')
-
-
-if __name__ == "__main__":
-    main()
