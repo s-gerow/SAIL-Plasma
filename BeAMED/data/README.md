@@ -66,8 +66,8 @@ Functions:
     * EngleSteinbeckEquation
     * RioussetEquation
 
-### open_data(filepath: str, use_ps_voltage:bool) -> (p_d, v, pd_err, v_err)
-
+### open_data(filepath: str, use_ps_voltage:bool) -> (p_d: ndarray, v: ndarray, pd_err: ndarray, v_err: ndarray)
+This function is used to extract the most commonly needed information from the csv files: $pd$, $v$, and their respective errors/uncertainties. If you need the other values in the file then you will need to get them manually.
 Input:
     * filepath: string representing the relative or absolute path to one of the *.csv files above.
     * use_ps_voltage: boolean value representing whether to return the power supply output voltage or the multimeter measured voltage. Default False.
@@ -76,3 +76,54 @@ Output:
     * v: numpy array containing all voltage values in the file.
     * pd_err: numpy array containing all pd error values in the file.
     * v_err: numpy array containing all v error values in the file.
+
+### unpack_coeffs(coeffs: list) -> (left: ndarray, mid: ndarray, right: ndarray)
+This function takes a list of coefficients [A1, B1, A2, B2, C2, D2, A1, B1] for a linear, cubic, and linear equations like below:
+
+$A_1x + B_1 = y$
+
+$A_2x^3 + B_2x^2 + C_2x + D_2 = y$
+
+$A_3x + B_3 = y$
+
+Then it returns three tuples containing the containerized coefficients:
+(A1, B1), (A2, B2, C2, D2), (A3, B3)
+Input:
+    * coeffs: list of 8 np.float values in order from highest order to lowest order for each segment of the fit from left to right: [linear, cubic, linear]
+Output:
+    * (left, mid, right): tuple of lists containing the left, middle, and right segment coefficients respectively.
+
+### split_data(x: ndarray, y: ndarray, n1: int, n2: int, length: int = 100, endpoints: bool = True, use_original_lengths: bool = False) -> ([x1p: ndarray, x2p: ndarray, x3p: ndarray], [y1p: ndarray, y2p: ndarray, y3p: ndarray])
+This function takes a full length x and y array and returns three sub arrays split at two provided node points: n1 and n2. If use_original_lengths is enabled then the function will simply split x and y at n1 and n2, producing three arrays which can be concatenated together to produce the original array. If use_original_lengths is diabled then the function will use the node points, n1 and n2, to produce three equal length arrays of size denoted by 'length' (100 by default) where the beginning and end of each array is the point located at the node points or the start/end of the input array. If endpoints is true then the last element of the array before a node point will be equal to the first element of the array after that node.
+For example:
+```
+split_data(
+    x=[1,2,3,4,5,6,7,8,9,10,11,12]
+    y=[1,2,3,4,5,6,7,8,9,10,11,12]
+    n1 = 4
+    n2 = 9
+    use_original_lengths = True
+    endpoints = True
+)
+>>> ([1,2,3,4,5],[5,6,7,8,9,10],[10,11,12]),([1,2,3,4,5],[5,6,7,8,9,10],[10,11,12])
+```
+Note that the node points overlap. This is to ensure that when plotting these three arrays separately, they will share the node points and overlap on the graph. This is also necessary for ensuring they are continuous at the nodes.
+Input:
+    * x (np.array): An array of x data points
+    * y (np.array): An array of corresponding y data points
+    * n1 (int): x-position index of the first node
+    * n2 (int): x-position index of the second node
+    * length (int): integer representing the length of each new array
+    * endpoints (bool): Boolean input, if true the endpoints of each array at the node points will be equal, e.g. x1[-1] = x2[0]
+    * use_original_lengths (bool): if true, the function will simply return the input array split into three segments
+Output:
+    * x (list): a list of three arrays with each segment of the input set
+    * y (list): a list of three arrays with each segment of the input set
+
+### eval_polynomial(x: list, coeffs: list) -> y[y1, y2, y3]
+eval_polynomial takes an input array of points and a set of coefficients in order of decreasing order and evaluates the polynomial at that position.
+Input:
+    * x (list): An list of x data point arrays
+    * coeffs (list): A list of coefficients corresponding to each array in x_data
+Output:
+    * y (list): A list of y data point arrays corresponding to the coefficients inputted evaluated at each position in the x arrays

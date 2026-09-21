@@ -86,11 +86,13 @@ class plot_app(tk.Tk):
         self.paschen_figure_canvas.get_tk_widget().pack(side='bottom')
 
     def _init_discharge_info(self):
+        for widget in self.discharge_info_frame.winfo_children():
+            widget.destroy()
         self.discharge_field_containers: dict[str,tk.Entry] = {}
         for key in self.selected_points.keys():
             frame = tk.LabelFrame(self.discharge_info_frame, text=key)
             frame.pack(anchor='w', fill='y')
-            TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit)
+            TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit).grid(row=0, column=0)
 
 
     def _init_discharge_plot(self):
@@ -163,7 +165,7 @@ class plot_app(tk.Tk):
         self.paschen_figure[file_key] = self.reader.get_paschen_data()
         frame = self.selected_file_frames[file_key]
         for discharge in discharges:
-            tk.Button(frame, text = discharge, width=res).grid(row=_row, column=0)
+            tk.Button(frame, text = discharge, width=res, command=lambda path=path, point = discharge: self.inspect_point(point, path)).grid(row=_row, column=0)
             _row+=1
         self.reader.close_file()
 
@@ -206,7 +208,11 @@ class plot_app(tk.Tk):
             
     def inspect_point(self, point, file):
         self.reader.open_file(file)
-        self.selected_points[point] = self.reader.get_discharge_data(point)
+        print(self.selected_points.keys())
+        if point in self.selected_points.keys():
+            pass
+        else:
+            self.selected_points[point] = self.reader.get_discharge_data(point)
         self.reader.close_file()
         self._init_discharge_info()
 

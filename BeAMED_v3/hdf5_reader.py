@@ -99,6 +99,7 @@ class HDF5Reader:
             return
         with h5py.File(self._save_dir/self.filepath, mode = 'r') as f:
             meta: DischargeMeta = DischargeMeta(
+                index=point,
                 date=f['discharges'][point]['meta'].attrs['date'],
                 trigger_source=f['discharges'][point]['meta'].attrs['trigger_source'],
                 notes=f['discharges'][point]['meta'].attrs['notes'],
