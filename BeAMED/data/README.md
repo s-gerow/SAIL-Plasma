@@ -127,3 +127,6 @@ Input:
     * coeffs (list): A list of coefficients corresponding to each array in x_data
 Output:
     * y (list): A list of y data point arrays corresponding to the coefficients inputted evaluated at each position in the x arrays
+
+### continuity_conditions(coeffs: list, left_node_x: int, right_node_x: int):
+continuity_conditions takes a full length list of coefficients 

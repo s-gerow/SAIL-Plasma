@@ -90,6 +90,8 @@ class plot_app(tk.Tk):
             widget.destroy()
         self.discharge_field_containers: dict[str,tk.Entry] = {}
         for key in self.selected_points.keys():
+            show_frame = tk.Frame(self.discharge_info_frame)
+            show_frame.pack(anchor='n', fill='both')
             frame = tk.LabelFrame(self.discharge_info_frame, text=key)
             frame.pack(anchor='w', fill='y')
             TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit).grid(row=0, column=0)
