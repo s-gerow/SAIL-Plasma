@@ -92,10 +92,10 @@ class plot_app(tk.Tk):
         for key in self.selected_points.keys():
             show_frame = tk.Frame(self.discharge_info_frame)
             show_frame.pack(anchor='n', fill='both')
-            frame = tk.LabelFrame(self.discharge_info_frame, text=key)
-            frame.pack(anchor='w', fill='y')
-            TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit).grid(row=0, column=0)
-
+            TreeButton(show_frame, text="Selected Points")
+            # frame = tk.LabelFrame(self.discharge_info_frame, text=key)
+            # frame.pack(anchor='w', fill='y')
+            # TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit).grid(row=0, column=0)
 
     def _init_discharge_plot(self):
         self.discharge_figure_canvas = FigureCanvasTkAgg(self.discharge_figure_plot, self.discharge_time_plot_frame)

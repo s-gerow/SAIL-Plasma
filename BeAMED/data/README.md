@@ -49,22 +49,28 @@ The Nelson files predated the above standard and so have some differences: mainl
 The following Python functions are provided in addition to the above datasets to aid in the recreation of all figures in the publication.
 
 Filename: dataanalysis.py
+
 Author: Seth Gerow
+
 Contact: gerows@my.erau.edu
+
 Date of Creation: 03/04/2026
+
 Last Changed: 03/12/2026
+
 Functions:
-    * open_data
-    * unpack_coeffs
-    * split_data
-    * eval_polynomial
-    * continuity_conditions
-    * concavity_conditions
-    * fit_data
-    * find_continuous_fit
-    * optimize_fit
-    * EngleSteinbeckEquation
-    * RioussetEquation
+
+  * open_data
+  * unpack_coeffs
+  * split_data
+  * eval_polynomial
+  * continuity_conditions
+  * concavity_conditions
+  * fit_data
+  * find_continuous_fit
+  * optimize_fit
+  * EngleSteinbeckEquation
+  * RioussetEquation
 
 ### open_data(filepath: str, use_ps_voltage:bool) -> (p_d: ndarray, v: ndarray, pd_err: ndarray, v_err: ndarray)
 This function is used to extract the most commonly needed information from the csv files: $pd$, $v$, and their respective errors/uncertainties. If you need the other values in the file then you will need to get them manually.

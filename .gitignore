@@ -16,7 +16,7 @@ __pycache__/
 *.TAB
 *.txt
 *.xlsx
-*csv
+*.csv
 *.gif
 
 #MACOS
@@ -37,9 +37,13 @@ Figures/
 .vscode
 *.zip
 BeAMED/Test Scripts/Figures/*
+BeAMED/Test Scripts/figures9-11/*
+BeAMED/Test Scripts/fixed figures 8-21/*
+BeAMED/Test Scripts/fixed_figures_9-8/*
+*.pdf
+*.eps
 *.png
 *.svg
-
 *.gif
 
 #include tutorial images
