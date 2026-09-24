@@ -11,9 +11,9 @@ from gui.frames.styles import TreeButton, ScrollFrame
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 from dataanalysis import *
-from datatypes import PaschenFigureData
+from datatypes import PaschenFigureData, DischargeData_h5, DischargeMeta, DischargeData
 from tkinter import messagebox
-from dataclasses import field
+from dataclasses import fields
 
 class plot_app(tk.Tk):
     def __init__(self):
@@ -29,9 +29,10 @@ class plot_app(tk.Tk):
         self.discharge_figure_plot = Figure(dpi=90)
         self.discharge_axes = self.discharge_figure_plot.add_subplot()
 
-        self.selected_files = {}
-        self.selected_file_frames = {}
-        self.selected_points = {}
+        self.selected_files = {} # {filename: path}
+        self.selected_file_frames:dict[str, tk.Frame] = {} #{filename: frame}
+        self.selected_points: dict[str,dict[str, DischargeData_h5]] = {} #filename: {point id: dischargeData}
+        self.discharge_frames: dict[str, tk.Frame]= {} # {point id: frame}
 
         print(f'HDF5 Plotter started in working directory {self.work_dir}')
         self._init_frames()
@@ -88,14 +89,39 @@ class plot_app(tk.Tk):
     def _init_discharge_info(self):
         for widget in self.discharge_info_frame.winfo_children():
             widget.destroy()
-        self.discharge_field_containers: dict[str,tk.Entry] = {}
-        for key in self.selected_points.keys():
-            show_frame = tk.Frame(self.discharge_info_frame)
-            show_frame.pack(anchor='n', fill='both')
-            TreeButton(show_frame, text="Selected Points")
-            # frame = tk.LabelFrame(self.discharge_info_frame, text=key)
-            # frame.pack(anchor='w', fill='y')
-            # TreeButton(frame, text="Edit", enable_command=self.enable_discharge_edit, disable_command=self.disable_discharge_edit).grid(row=0, column=0)
+        self.discharge_field_containers: dict[str,dict[str,list[tk.Entry, tk.StringVar]]] = {}
+        show_frame = tk.LabelFrame(self.discharge_info_frame)
+        show_frame.grid(row=0, column=0, sticky='new')
+        i = 0
+        for file in self.selected_points.keys():
+            for key in self.selected_points[file].keys():
+                containers: dict[str,tk.Entry] = {}
+                print(self.selected_points[file].keys())
+                TreeButton(show_frame, text=f"{file}/{key}", enable_command=lambda file= file, key=key:self.show_discharge_info(file, key),disable_command=lambda key=key:self.hide_discharge_info(key)).grid(row=0, column = i)
+                frame = tk.LabelFrame(self.discharge_info_frame, text=f"{file}/{key}")
+                self.discharge_frames[key] = frame
+                # frame.pack(anchor='w', fill='y')
+                discharge_data = self.selected_points[file].get(key)
+                j = 0
+                k = 0
+                for element in fields(discharge_data):
+                    print(f"{element.name} | {element.type}")
+                    if element.type in (DischargeMeta, DischargeData):
+                        for atr in fields(getattr(discharge_data,element.name)):
+                            print(f"{atr.name} | {atr.type}")
+                            tk.Label(frame, text=atr.name).grid(row=j, column=k)
+                            var = tk.StringVar(value=getattr(getattr(discharge_data,element.name),atr.name))
+                            containers[atr.name] = (tk.Entry(frame, textvariable=var, state='readonly'), var)
+                            containers[atr.name][0].grid(row=j, column=k+2)
+                            #TreeButton(frame, text="Edit", enable_command= lambda self.enable_discharge_edit(key), disable_command=self.disable_discharge_edit).grid(row=i, column=j+2)
+                            j += 1
+                        k += 3
+                        j = 0
+                i += 1
+                self.discharge_field_containers[key] = containers
+                
+
+                
 
     def _init_discharge_plot(self):
         self.discharge_figure_canvas = FigureCanvasTkAgg(self.discharge_figure_plot, self.discharge_time_plot_frame)
@@ -109,7 +135,18 @@ class plot_app(tk.Tk):
     def disable_discharge_edit(self):
         for container in self.discharge_field_containers.values():
             container.config(state='readonly')
-    
+
+    def show_discharge_info(self, file, key):
+        # for frame in self.discharge_frames.values():
+        #     frame.pack_forget()
+        self.discharge_frames[key].grid(row=1, column=0, sticky='nsew')
+        self.plot_discharge_time_series(file, key)
+
+    def hide_discharge_info(self, key):
+        self.discharge_frames[key].grid_forget()
+        self.discharge_axes.clear()
+        self.discharge_figure_canvas.draw()
+
     def read_dir(self):
         dir_list = os.scandir(self.work_dir)
         _row = 1
@@ -154,6 +191,7 @@ class plot_app(tk.Tk):
             if file in self.selected_files.keys():
                 self.selected_files.pop(file)
             self.close_h5(file)
+            self.deselect_point(file=file)
         except KeyError:
             print(f"{file} not in selection")
         
@@ -167,7 +205,7 @@ class plot_app(tk.Tk):
         self.paschen_figure[file_key] = self.reader.get_paschen_data()
         frame = self.selected_file_frames[file_key]
         for discharge in discharges:
-            tk.Button(frame, text = discharge, width=res, command=lambda path=path, point = discharge: self.inspect_point(point, path)).grid(row=_row, column=0)
+            tk.Button(frame, text = discharge, width=res, command=lambda file=file_key, point = discharge: self.inspect_point(point, file)).grid(row=_row, column=0)
             _row+=1
         self.reader.close_file()
 
@@ -183,6 +221,14 @@ class plot_app(tk.Tk):
                 self.paschen_figure_canvas.draw()
         else:
             print("no file open")
+
+    def plot_discharge_time_series(self, file, key):
+        discharge_data = self.selected_points[file].get(key)
+        dmm_data = getattr(discharge_data, 'dmm_time')
+        voltage = getattr(dmm_data, "samples_voltage")[1]
+        t = getattr(dmm_data, "samples_voltage")[0]
+        self.discharge_axes.scatter(t,voltage)
+        self.discharge_figure_canvas.draw()
 
     def close_h5(self, file):
         self._init_discharges()
@@ -209,14 +255,34 @@ class plot_app(tk.Tk):
         self.paschen_figure_canvas.draw()
             
     def inspect_point(self, point, file):
-        self.reader.open_file(file)
-        print(self.selected_points.keys())
-        if point in self.selected_points.keys():
+        filepath = self.selected_files[file]
+        self.reader.open_file(filepath)
+        if not file in self.selected_points.keys():
+            self.selected_points[file] = {}
+        if point in self.selected_points[file].keys():
             pass
         else:
-            self.selected_points[point] = self.reader.get_discharge_data(point)
+            self.selected_points[file][point] = self.reader.get_discharge_data(point)
         self.reader.close_file()
         self._init_discharge_info()
+
+    def deselect_point(self, file = None, point = None):
+        if not point and not file:
+            for file in self.selected_files.keys():
+                points = list(self.selected_points[file].keys())
+                for point in points:
+                    self.discharge_field_containers.pop(point)
+                    self.selected_points.pop(point)
+        elif not point:
+            points = list(self.selected_points[file].keys())
+            for point in points:
+                self.discharge_field_containers.pop(point)
+                self.selected_points.pop(point) 
+        else:
+            self.discharge_field_containers.pop(point)
+            self.selected_points[file].pop(point)
+        self._init_discharge_info()
+
 
 if __name__ == "__main__":
     plotter = plot_app()

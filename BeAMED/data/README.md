@@ -2,7 +2,7 @@
 This file describes the format of the 2024-2026 BeAMED data output files. 
 
 ## Naming convention
-With the exception of Nelson*.csv data files which have a slightly different column convention and do not include dates in their timestamp or filename, all files are .csv files with the following naming convention:
+All files are .csv files with the following naming convention:
 
 YYYYMMDD_{Gas}_{Gap Size}.csv
 
@@ -27,22 +27,6 @@ Each file contains the following columns:
 * d(d) This is the uncertainty of the linear feedthrough which sets the gap distance based on the resolution of the ruler on its side.
 * d(pd_KJL): This is the uncertainty of the product $pd$ based on combining the uncertainties of the pressure from the KJL sensor and the distance.
 * d(pd_MKS): This is the uncertainty of the product $pd$ based on combining the uncertainties of the pressure from the MKS sensor and the distance.
-
-## Column Convention for Nelson* files
-
-The Nelson files predated the above standard and so have some differences: mainly, that the MKS pressure transducer was not available, the linear feedthrough was not motorized, and time stamps do not include dates. The following are the Columns in these files:
-
-* Time Stamp: If included this is the time of day the discharge was taken, date is not included.
-* D_Y(mV): The difference between the top of the peak and bottom of the spike in current measured by the oscilloscope which detected the discharge. This has units of miliVolts and should correspond 1V/1A to the current in the system at the time of discharge.
-* Power Supply Voltage: This is the voltage output of the Keithley 800-1 power supply. Measured in Volts.
-* Voltage Output:  This is the voltage measured across the breakdown gap by the Keithley DMM 6500 digital multimeter. Measured in Volts.
-* Power Supply Current: This is the input current measured by the Keithley 800-1 power supply. Measured in Amps.
-* Pressure (Torr): This is the pressure in the chamber measured by the Kurt J. Lesker ____ pressure sensor. Measured in Torr.
-* p_Predict(Torr): This is the input pressure that the system attempted to set the chamber to. Input is in units of Torr.
-* dis (cm): This is the gap distance in cm set by the user.
-* d(V): This is the uncertainty in the voltage measurement of the Keithley DMM 6500 according to the user manual. Units are Volts.
-* d(p): This is the uncertainty in the pressure measurement of the KJL pressure sensor according to the user manual. Units in Torr.
-* d(pd): This is the uncertainty of the product $pd$ based on combining the uncertainties of the pressure from the KJL sensor and the distance.
 
 ## Data Analysis Functions
 
