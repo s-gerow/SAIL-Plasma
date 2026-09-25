@@ -36,7 +36,7 @@ def unpack_coeffs(coeffs: list) -> tuple:
     unpacks the coeffecients into their respective sections.\n
     
     Parameters:
-        coeffs (list): A list of 10 coeffecients for the peicewise
+        coeffs (list): A list of 8 coeffecients for the peicewise
     Returns:
         left (list): The coeffecients for the left linear section.
         mid (list): The coeffecients for the middle cubic section.
