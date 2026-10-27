@@ -5,14 +5,14 @@ import time
 import threading
 import logging
 from typing import TYPE_CHECKING
-from equipment.nidaqequipment import NIDAQEquipment
-from equipment.oscilloscope import SiglentSDS1204XE
-from equipment.multimeter import KeithleyDMM6500
-from equipment.powersupply import Keithley2260B_800_1
+from .equipment.nidaqequipment import NIDAQEquipment
+from .equipment.oscilloscope import SiglentSDS1204XE
+from .equipment.multimeter import KeithleyDMM6500
+from .equipment.powersupply import Keithley2260B_800_1
 
 if TYPE_CHECKING:
-    from threadcontroller import Controller  # only imported for type hints, not at runtime
-from datatypes import (
+    from .threadcontroller import Controller  # only imported for type hints, not at runtime
+from .datatypes import (
     RunData,
     DischargeMeta,
     ExperimentMeta,
@@ -27,7 +27,7 @@ from datatypes import (
     PowerSeries,
     Waveform
 )
-from npz_writer import NPZWriter    
+from .npz_writer import NPZWriter    
 
 class ExperimentProcess:
     def __init__(self, controller: 'Controller', writer: NPZWriter):

@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from datatypes import RunData, ExperimentMeta, DischargeMeta
+from .datatypes import RunData, ExperimentMeta, DischargeMeta
 
 class NPZWriter:
     """

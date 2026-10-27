@@ -7,11 +7,11 @@ import os
 import sys
 from pathlib import Path
 from functools import reduce
-from gui.frames.styles import TreeButton, ScrollFrame
+from .gui.frames.styles import TreeButton, ScrollFrame
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
-from dataanalysis import *
-from datatypes import PaschenFigureData, DischargeData_h5, DischargeMeta, DischargeData
+from .dataanalysis import *
+from .datatypes import PaschenFigureData, DischargeData_h5, DischargeMeta, DischargeData
 from tkinter import messagebox
 from dataclasses import fields
 

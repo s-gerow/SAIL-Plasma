@@ -5,10 +5,10 @@ import queue
 import logging
 import time
 from typing import Any
-from equipment.baseequipment import Equipment
-from datatypes import ConnectResult, ActionResult, DisconnectResult, DischargeMeta, RunData, ExperimentParams, DischargeComplete, DischargeData, DischargeSkipped, PressureTimeseries, MFCTimeseries
-from hdf5_writer import HDF5Writer
-from process import ExperimentProcess
+from .equipment.baseequipment import Equipment
+from .datatypes import ConnectResult, ActionResult, DisconnectResult, DischargeMeta, RunData, ExperimentParams, DischargeComplete, DischargeData, DischargeSkipped, PressureTimeseries, MFCTimeseries
+from .hdf5_writer import HDF5Writer
+from .process import ExperimentProcess
 import os
 from pathlib import Path
 

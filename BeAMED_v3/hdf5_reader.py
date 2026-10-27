@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-from datatypes import PaschenFigureData, DischargeData_h5, DischargeMeta, DischargeData, MFCTimeseries, PressureTimeseries, PowerSeries, DMMSeries, Waveform
+from .datatypes import PaschenFigureData, DischargeData_h5, DischargeMeta, DischargeData, MFCTimeseries, PressureTimeseries, PowerSeries, DMMSeries, Waveform
 
 class HDF5Reader:
     def __init__(self):

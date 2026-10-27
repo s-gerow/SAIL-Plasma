@@ -1,13 +1,13 @@
 import logging
 import pyvisa
 
-from threadcontroller import Controller
-from equipment.oscilloscope import SiglentSDS1204XE
-from equipment.nidaqequipment import NIDAQEquipment
-from equipment.multimeter import KeithleyDMM6500
-from equipment.powersupply import Keithley2260B_800_1
-from gui.main_window import BeAMEDWindow
-from loggingconfig import init_logging
+from .threadcontroller import Controller
+from .equipment.oscilloscope import SiglentSDS1204XE
+from .equipment.nidaqequipment import NIDAQEquipment
+from .equipment.multimeter import KeithleyDMM6500
+from .equipment.powersupply import Keithley2260B_800_1
+from .gui.main_window import BeAMEDWindow
+from .loggingconfig import init_logging
 
 def main():
     init_logging(log_dir="logs", level="INFO")

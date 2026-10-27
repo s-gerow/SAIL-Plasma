@@ -3,7 +3,7 @@ import numpy as np
 import logging
 from datetime import datetime
 from pathlib import Path
-from datatypes import RunData, ExperimentMeta, DischargeMeta, DischargeData
+from .datatypes import RunData, ExperimentMeta, DischargeMeta, DischargeData
 
 class HDF5Writer:
     def __init__(self, log_queue=None):

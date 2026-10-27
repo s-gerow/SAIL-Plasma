@@ -7,6 +7,9 @@ from scipy.special import erf
 import matplotlib.animation as animation
 import time
 from typing import Literal
+from .datatypes import DischargeData_h5
+import h5py
+from .hdf5_reader import HDF5Reader
 
 plt.rcParams['text.usetex'] = False
 
@@ -384,6 +387,48 @@ def main():
         plt.show()
         #ani_object.fig.savefig(fname = f'{ani_object.filename}OptimizedPlot.png')
 
+def import_hdf5(path, reader:HDF5Reader):
+    reader.open_file(path)
+
+    discharge_data: dict[str, DischargeData_h5] = {}
+
+    for discharge in list(reader.list_discharges()):
+        discharge_data[discharge] = reader.get_discharge_data(discharge)
+
+    VCR = []
+    PD = []
+    VCR_original = []
+    VCR_err = []
+    PD_err = []
+
+    for discharge in list(discharge_data.keys()):#[18:]:
+            
+        T,V = getattr(discharge_data[discharge].dmm_time, 'samples_voltage')
+        # print(V)
+
+        # fig, ax = plt.subplots()
+
+        # ax.scatter(T,V, s=2)
+
+        pd = getattr(discharge_data[discharge].data, 'gap_cm')*getattr(discharge_data[discharge].data, 'pressure_mks')
+        VCR_original.append(getattr(discharge_data[discharge].data, 'voltage_dmm'))
+        _dv_index = []
+        for i,v in enumerate(V):
+            if i == 0:
+                pass
+            elif (v - V[i-1]) < -5:
+                print(discharge,i-1,V[i-1])
+                _dv_index.append(i-1)
+            else:
+                pass
+        vcr = V[_dv_index[0]]
+        
+        VCR.append(vcr)
+        PD.append(pd)
+        VCR_err.append( (0.00004 * vcr) + (0.000006 * 1000) + (0.00002 * max(0, vcr-500)))
+        PD_err.append(getattr(discharge_data[discharge].data, 'pd_mks_err'))
+
+    return PD, VCR, PD_err, VCR_err
 
 if __name__ == "__main__":
     main()
